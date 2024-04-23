@@ -303,7 +303,7 @@ def main():
             temp.append(re.search(arith_expr, line).group().strip("=;"))
             quack.append(temp)
 
-    Obj.ASM_FILE = "Calculator.asm"
+    Obj.ASM_FILE = "Main.asm"
 
     try:
         open(Obj.ASM_FILE, "x")
@@ -312,7 +312,7 @@ def main():
 
     # write header information
     f = open(Obj.ASM_FILE, "a")
-    print(".class Calculator:Obj", file=f)
+    print(".class Main:Obj", file=f)
     print(".method $constructor", file=f)
     print("\t.local ", file=f, end="")
 
