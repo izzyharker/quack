@@ -66,6 +66,14 @@ class Bool(Obj):
         self.val = value
         self.type = BOOL
 
+    def evaluate(self):
+        with open(Obj.ASM_FILE, "a") as f:
+            if self.val:
+                print(f"\tconst 1", file=f)
+            else:
+                print(f"\tconst 0", file=f)
+        f.close()
+
 class Nothing(Obj):
     def __init__(self):
         super().__init__(None)
@@ -92,15 +100,20 @@ class Variable(Obj):
     def __str__(self):
         return f"self.name: self.type"
     
-    def evaluate(self) -> Obj:
+    def store(self) -> Obj:
         self.val.evaluate()
         with open(Obj.ASM_FILE, "a") as f:
             print(f"\tstore {self.name}", file=f)
         f.close()
 
+    def evaluate(self) -> Obj:
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"\tload {self.name}", file=f)
+        f.close()
+
 class Operator(Obj):
     # operator tree
-    ops = {"+": "plus", "-": "minus", "*": "times", "/": "divide"}
+    ops = {"+": "plus", "-": "minus", "*": "multiply", "/": "divide"}
 
     def __init__(self, left: Obj, right: Obj, op: str):
         self.left = left
@@ -290,7 +303,7 @@ def main():
             temp.append(re.search(arith_expr, line).group().strip("=;"))
             quack.append(temp)
 
-    Obj.ASM_FILE = file.split(".")[0] + ".asm"
+    Obj.ASM_FILE = "Calculator.asm"
 
     try:
         open(Obj.ASM_FILE, "x")
@@ -301,7 +314,7 @@ def main():
     f = open(Obj.ASM_FILE, "a")
     print(".class Calculator:Obj", file=f)
     print(".method $constructor", file=f)
-    print(".local ", file=f, end="")
+    print("\t.local ", file=f, end="")
 
     f.close()
 
@@ -329,7 +342,7 @@ def main():
                 print(f"{key.name}", file=f, end="")
                 first = False
             elif key.name:
-                print(f", {key.name}", file=f, end="")
+                print(f",{key.name}", file=f, end="")
         names.add(key.name)
     
     print("\n\tenter", file=f)
@@ -341,7 +354,7 @@ def main():
         if var == 0:
             continue
         # print("var", var)
-        var.evaluate()
+        var.store()
 
     f = open(Obj.ASM_FILE, "a")
     print("\treturn 0", file=f)
