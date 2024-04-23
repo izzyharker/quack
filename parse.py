@@ -10,6 +10,8 @@ OBJ, INT, NEGINT, STRING, BOOL, NOTHING = range(6)
 
 node_types = {OBJ: "OBJ", INT: "INT", NEGINT: "NEGINT", STRING: "STRING", BOOL: "BOOL", NOTHING: "NOTHING"}
 
+var_types = {"Obj": OBJ, "Int": INT, "String": STRING, "Bool": BOOL}
+
 class Obj():
     ASM_FILE = "out.asm"
 
@@ -35,11 +37,22 @@ class Int(Obj):
         self.val = value
         self.type = INT
 
-class NegInt(Obj):
-    def __init__(self, value: int):
-        super().__init__(value)
-        self.val = abs(value)
-        self.type = INT
+    def evaluate(self):
+        with open(Obj.ASM_FILE, "a") as f:
+            if self.val < 0:
+                print(f"\tconst 0", file=f)
+                print(f"\tconst {abs(self.val)}", file=f)
+                print(f"\tcall Int:minus", file=f)
+            else:
+                print(f"\tconst {self.val}", file=f)
+        f.close()
+            
+
+# class NegInt(Obj):
+#     def __init__(self, value: int):
+#         super().__init__(value)
+#         self.val = abs(value)
+#         self.type = INT
 
 class String(Obj):
     def __init__(self, value: str):
@@ -60,17 +73,24 @@ class Nothing(Obj):
         self.type = NOTHING
 
 class Variable(Obj):
-    vars: dict[str: Obj] = {}
+    # vars: 
+    # name: (type, number in sequence)
+    vars: dict[Obj: int] = {}
+    var_index = 0
 
-    def __init__(self, name: str, value: Obj):
+    def __init__(self, name: str, given_type: str, value: Obj):
         self.name = name
         self.val = value
-        self.type = OBJ
+        self.type = var_types[given_type]
 
-        Variable.vars[self.name] = self
+        Variable.vars[self] = Variable.var_index
+        Variable.var_index += 1
 
     def get_type(self) -> int:
         return self.type
+    
+    def __str__(self):
+        return f"self.name: self.type"
     
     def evaluate(self) -> Obj:
         self.val.evaluate()
@@ -183,13 +203,13 @@ class Tree():
         if match is not None:
             match = match.group()
             self.eat(Tree.types["NegInt"], len(match))
-            return NegInt(0 - int(match))
+            return Int(int(match))
         
         match = re.match(Tree.types["Int"], self.tokens[self.index:])
         if match is not None:
             match = match.group()
             self.eat(Tree.types["Int"], len(match))
-            return NegInt(int(match))
+            return Int(int(match))
         
         elif re.match(Tree.types["LParen"], self.tokens[self.index:]):
             self.eat()
@@ -245,7 +265,6 @@ class Tree():
     def parse(self):
         return self.E()
 
-
 def main():
     if len(sys.argv) > 1:
         file = sys.argv[1]
@@ -282,21 +301,47 @@ def main():
     f = open(Obj.ASM_FILE, "a")
     print(".class Calculator:Obj", file=f)
     print(".method $constructor", file=f)
-    print("\tenter", file=f)
+    print(".local ", file=f, end="")
 
     f.close()
 
-    log.debug(f"{quack}")
+    log.debug(f" {quack}")
 
+    first = True
     for line in quack:
         expr = line[2].strip()
-        log.debug(f"Expr: {expr}")
+        log.info(f" Expr: {expr}")
         eval = Tree(expr)
         eval = eval.parse()
-        var = Variable(line[0], eval)
-        log.debug(f"{var.name}, {var.val}")
+        var = Variable(line[0], line[1], eval)
+        log.info(f" {var.name}, {var.val}")
+
+    log.info(f"{Variable.vars}")
+    
+    var_list = [0]*Variable.var_index
+    f = open(Obj.ASM_FILE, "a")
+    names = set()
+
+    for key, val in Variable.vars.items():
+        var_list[val] = key
+        if key.name not in names:
+            if first:
+                print(f"{key.name}", file=f, end="")
+                first = False
+            elif key.name:
+                print(f", {key.name}", file=f, end="")
+        names.add(key.name)
+    
+    print("\n\tenter", file=f)
+    f.close()
+
+    # print(var_list)
+
+    for var in var_list:
+        if var == 0:
+            continue
+        # print("var", var)
         var.evaluate()
-        # what to do with the variable...
 
     f = open(Obj.ASM_FILE, "a")
     print("\treturn 0", file=f)
