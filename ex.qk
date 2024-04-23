@@ -1,0 +1,8 @@
+x: Int = (55 + 5);
+y: String = "Hi";
+
+tru: Bool = True;
+
+z: Int = 5 + 3 * 8 / 2;
+
+x: String = "Wor ld" - False + (5*3);

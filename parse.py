@@ -1,7 +1,9 @@
 import re
 import os
+import sys
+import logging as log
 
-ASM_FILE = "test.asm"
+log.basicConfig(level=log.INFO)
 
 # nodes types for Nano-quack
 OBJ, INT, NEGINT, STRING, BOOL, NOTHING = range(6)
@@ -9,6 +11,8 @@ OBJ, INT, NEGINT, STRING, BOOL, NOTHING = range(6)
 node_types = {OBJ: "OBJ", INT: "INT", NEGINT: "NEGINT", STRING: "STRING", BOOL: "BOOL", NOTHING: "NOTHING"}
 
 class Obj():
+    ASM_FILE = "out.asm"
+
     def __init__(self, value: None):
         self.val = value
         self.type = OBJ
@@ -17,10 +21,10 @@ class Obj():
         return self.type
 
     def evaluate(self):
-        # with open(ASM_FILE, "a") as f:
-        #     print(f"\tconst {self.val}", file=f)
-        # f.close()
-        print(f"\tconst {self.val}")
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"\tconst {self.val}", file=f)
+        f.close()
+        # print(f"\tconst {self.val}")
     
     def __str__(self):
         return f"({node_types[self.type]}, {self.val})"
@@ -70,6 +74,9 @@ class Variable(Obj):
     
     def evaluate(self) -> Obj:
         self.val.evaluate()
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"\tstore {self.name}", file=f)
+        f.close()
 
 class Operator(Obj):
     # operator tree
@@ -89,10 +96,10 @@ class Operator(Obj):
         self.right.evaluate()
 
         # print to file
-        # with open(ASM_FILE, "a") as f:
-        #     print(f"\tcall Int:{Operator.ops[self.op]}", file=f)
-        # f.close()
-        print(f"\tcall Int:{Operator.ops[self.op]}")
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"\tcall Int:{self.op}", file=f)
+        f.close()
+        # print(f"\tcall Int:{Operator.ops[self.op]}")
         
         pass
 
@@ -115,7 +122,7 @@ prod -> num
 """
 
 class Tree():
-    types = {"NegInt": r"-\d+", "Int": r"\d+", "String": r"\"\w+\"", "Bool": r"True|False", "LParen": r"\(.*\)?", "RParen": r"\(?.*\)"}
+    types = {"NegInt": r"-\d+", "Int": r"\d+", "String": r"\".*\"", "Bool": r"True|False", "LParen": r"\(.*\)?", "RParen": r"\(?.*\)"}
 
     def __init__(self, expr: list[str]):
         self.index = 0
@@ -128,47 +135,83 @@ class Tree():
     def __str__(self):
         return self.tokens
     
-    def eat(self, expect: str = r".*"):
-        if re.match(expect, self.tokens[self.index]):
-            self.index += 1
+    def check_space(self):
+        if (self.index >= self.num_tokens):
+            return
+        token = self.tokens[self.index]
+        while re.match(r"\s", token):
+            log.debug("space!")
+            self.eat(r" ")
+            if (self.index >= self.num_tokens):
+                return
+            token = self.tokens[self.index]
+            log.debug(f"New token: {self.tokens[self.index]}")
+    
+    def eat(self, expect: str = r".*", num_to_jump: int = 1):
+        # print("eat")
+        match = re.match(expect, self.tokens[self.index:])
+        if match is not None:
+            self.index += num_to_jump
+            self.check_space()
         else:
+            print("Error: ", self.tokens[self.index:])
             self.error()
 
     def F(self):
-        """F : -num | num | var | ( expr ) | str"""
+        """F : -num | num | var | ( expr ) | str | bool """
         token = self.tokens[self.index]
-        print("F: ", token, self.index)
-        if token in list(Variable.vars.keys()):
-            self.eat()
-            return Variable.vars[token]
-        elif re.match(Tree.types["Bool"], token):
-            self.eat(Tree.types["Bool"])
-            if token == "true":
+        # print("F: ", token, self.index)
+        self.check_space()
+
+        try:
+            token = re.match(r"[^\s]+", token).group()
+            if token in list(Variable.vars.keys()):
+                self.eat()
+                return Variable.vars[token]
+        except:
+            None
+        
+        match = re.match(Tree.types["Bool"], self.tokens[self.index:])
+        if match is not None:
+            match = match.group()
+            self.eat(Tree.types["Bool"], len(match))
+            if match == "True":
                 return Bool(True)
             return Bool(False)
-        elif re.match(Tree.types["NegInt"], token):
-            self.eat(Tree.types["NegInt"])
-            return NegInt(int(token))
-        elif re.match(Tree.types["Int"], token):
-            self.eat(Tree.types["Int"])
-            return Int(int(token))
-        # TODO: parentheses
-        # elif re.match(Tree.types["LParen"], token):
-        #     # self.tokens[self.index] = re.match(r"(.*)", token).group()
-        #     self.eat()
-        #     node = self.E()
-        #     self.eat()
-        #     return node
-        elif re.match(Tree.types["String"], token):
-            self.eat(Tree.types["String"])
-            print(token)
-            return String(token)
+        
+        match = re.match(Tree.types["NegInt"], self.tokens[self.index:])
+        if match is not None:
+            match = match.group()
+            self.eat(Tree.types["NegInt"], len(match))
+            return NegInt(0 - int(match))
+        
+        match = re.match(Tree.types["Int"], self.tokens[self.index:])
+        if match is not None:
+            match = match.group()
+            self.eat(Tree.types["Int"], len(match))
+            return NegInt(int(match))
+        
+        elif re.match(Tree.types["LParen"], self.tokens[self.index:]):
+            self.eat()
+            node = self.E()
+            self.eat()
+            return node
+        
+        match = re.match(Tree.types["String"], self.tokens[self.index:])
+        if match is not None:
+            match = match.group()
+            self.eat(Tree.types["String"], len(match))
+            return String(match)
         else:
             return Nothing()
 
     def T(self):
         """T : T * F | T / F | F"""
         node = self.F()
+        # self.check_space()
+
+        if self.index < self.num_tokens:
+            log.debug(f"Node: {node}, token: {self.tokens[self.index]}")
 
         while self.index < self.num_tokens and self.tokens[self.index] in "*/":
             token = self.tokens[self.index]
@@ -177,7 +220,7 @@ class Tree():
 
             node = Operator(node, self.F(), token)
         
-        print("T: ", node)
+        # print("T: ", node)
         return node
 
     def E(self):
@@ -186,6 +229,9 @@ class Tree():
         """
         node = self.T()
 
+        if self.index < self.num_tokens:
+            log.debug(f"Node: {node}, token: {self.tokens[self.index]}")
+
         while self.index < self.num_tokens and self.tokens[self.index] in "+-":
             token = self.tokens[self.index]
             if token == "+" or token == "-":
@@ -193,28 +239,19 @@ class Tree():
 
             node = Operator(node, self.T(), token)
 
-        print("E: ", node)
+        # print("E: ", node)
         return node
     
     def parse(self):
         return self.E()
-            
-
 
 
 def main():
-    # try:
-    #     open(ASM_FILE, "x")
-    # except FileExistsError:
-    #     os.remove(ASM_FILE)
-
-    # # write header information
-    # f = open(ASM_FILE, "a")
-    # print(".class Calculator:Obj", file=f)
-    # print(".method $constructor", file=f)
-    # print("\tenter", file=f)
-
-    # f.close()
+    if len(sys.argv) > 1:
+        file = sys.argv[1]
+    else:
+        file = "ex.qk"
+    # read quack
 
     quack = []
 
@@ -222,8 +259,8 @@ def main():
     var_type = r"Int|Bool|String|Obj"
     arith_expr = r"\= \-?.+([-+*/]\-?.+)*;"
 
-    # read quack
-    with open("ex.qk", "r") as qk:
+
+    with open(file, "r") as qk:
         lines = qk.readlines()
         for line in lines:
             if (line == "\n"):
@@ -234,23 +271,36 @@ def main():
             temp.append(re.search(arith_expr, line).group().strip("=;"))
             quack.append(temp)
 
-    # build tree
-    print(quack)
+    Obj.ASM_FILE = file.split(".")[0] + ".asm"
+
+    try:
+        open(Obj.ASM_FILE, "x")
+    except FileExistsError:
+        os.remove(Obj.ASM_FILE)
+
+    # write header information
+    f = open(Obj.ASM_FILE, "a")
+    print(".class Calculator:Obj", file=f)
+    print(".method $constructor", file=f)
+    print("\tenter", file=f)
+
+    f.close()
+
+    log.debug(f"{quack}")
 
     for line in quack:
-        expr = line[2].split()
-        print(expr)
+        expr = line[2].strip()
+        log.debug(f"Expr: {expr}")
         eval = Tree(expr)
         eval = eval.parse()
-        print(eval)
         var = Variable(line[0], eval)
-        print(var.name)
-        print(var.val)
+        log.debug(f"{var.name}, {var.val}")
+        var.evaluate()
         # what to do with the variable...
 
-    # f = open(ASM_FILE, "a")
-    # print("\treturn 0", file=f)
-    # f.close()
+    f = open(Obj.ASM_FILE, "a")
+    print("\treturn 0", file=f)
+    f.close()
 
 if __name__ == "__main__":
     main()
