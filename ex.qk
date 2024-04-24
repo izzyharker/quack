@@ -5,6 +5,8 @@ tru: Bool = True;
 
 z: Int = 5 + 3 * 8 / 2;
 
+yay: Int = y + x - 3*(-52 + 7* 12 - tru);
+
 x: String = "Wor ld" - False + (5*3);
 
 bad: Int = 5 * 3 - True + 4;
