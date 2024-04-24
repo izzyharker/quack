@@ -195,13 +195,13 @@ class Tree():
 
     def F(self):
         """F : -num | num | var | ( expr ) | str | bool """
-        token = self.tokens[self.index]
+        # token = self.tokens[self.index]
         
         self.check_space()
 
         try:
             # look for a variable
-            token = re.match(r"[^\s\)]+", self.tokens[self.index:]).group()
+            token = re.match(r"[^\s\)-+*/;]+", self.tokens[self.index:]).group()
             # log.info(f"found {token} from {self.tokens[self.index:]}")
             if token in Variable.var_names:
                 log.info(f"found a var! {token}")
