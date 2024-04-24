@@ -83,7 +83,8 @@ class Nothing(Obj):
 class Variable(Obj):
     # vars: 
     # name: (type, number in sequence)
-    vars: dict[Obj: int] = {}
+    expr: list[Obj] = []
+    var_names: list[str] = []
     var_index = 0
 
     def __init__(self, name: str, given_type: str, value: Obj):
@@ -91,22 +92,24 @@ class Variable(Obj):
         self.val = value
         self.type = var_types[given_type]
 
-        Variable.vars[self] = Variable.var_index
+        Variable.expr.append(self)
+        if self.name not in Variable.var_names:
+            Variable.var_names.append(self.name)
         Variable.var_index += 1
 
     def get_type(self) -> int:
         return self.type
     
     def __str__(self):
-        return f"self.name: self.type"
+        return f"{self.name}: {node_types[self.type]}"
     
-    def store(self) -> Obj:
+    def store(self) -> None:
         self.val.evaluate()
         with open(Obj.ASM_FILE, "a") as f:
             print(f"\tstore {self.name}", file=f)
         f.close()
 
-    def evaluate(self) -> Obj:
+    def evaluate(self) -> None:
         with open(Obj.ASM_FILE, "a") as f:
             print(f"\tload {self.name}", file=f)
         f.close()
@@ -155,7 +158,7 @@ prod -> num
 """
 
 class Tree():
-    types = {"NegInt": r"-\d+", "Int": r"\d+", "String": r"\".*\"", "Bool": r"True|False", "LParen": r"\(.*\)?", "RParen": r"\(?.*\)"}
+    types = {"Int": r"-?\d+", "String": r"\".*\"", "Bool": r"True|False", "LParen": r"\(.*\)?", "RParen": r"\(?.*\)"}
 
     def __init__(self, expr: list[str]):
         self.index = 0
@@ -193,17 +196,23 @@ class Tree():
     def F(self):
         """F : -num | num | var | ( expr ) | str | bool """
         token = self.tokens[self.index]
-        # print("F: ", token, self.index)
+        
         self.check_space()
 
         try:
-            token = re.match(r"[^\s]+", token).group()
-            if token in list(Variable.vars.keys()):
-                self.eat()
-                return Variable.vars[token]
+            # look for a variable
+            token = re.match(r"[^\s\)]+", self.tokens[self.index:]).group()
+            # log.info(f"found {token} from {self.tokens[self.index:]}")
+            if token in Variable.var_names:
+                log.info(f"found a var! {token}")
+                self.eat(r".*", len(token))
+                for i in range(len(Variable.expr) - 1, -1, -1):
+                    if Variable.expr[i].name == token:
+                        return Variable.expr[i]
         except:
             None
         
+        # then check bool
         match = re.match(Tree.types["Bool"], self.tokens[self.index:])
         if match is not None:
             match = match.group()
@@ -212,36 +221,34 @@ class Tree():
                 return Bool(True)
             return Bool(False)
         
-        match = re.match(Tree.types["NegInt"], self.tokens[self.index:])
-        if match is not None:
-            match = match.group()
-            self.eat(Tree.types["NegInt"], len(match))
-            return Int(int(match))
-        
+        # int
         match = re.match(Tree.types["Int"], self.tokens[self.index:])
         if match is not None:
             match = match.group()
             self.eat(Tree.types["Int"], len(match))
             return Int(int(match))
-        
+
+        # left parentheses
         elif re.match(Tree.types["LParen"], self.tokens[self.index:]):
             self.eat()
             node = self.E()
             self.eat()
             return node
-        
+
+        # and finally string
         match = re.match(Tree.types["String"], self.tokens[self.index:])
         if match is not None:
             match = match.group()
             self.eat(Tree.types["String"], len(match))
             return String(match)
+        
+        # if nothing matched, return nothing object
         else:
             return Nothing()
 
     def T(self):
         """T : T * F | T / F | F"""
         node = self.F()
-        # self.check_space()
 
         if self.index < self.num_tokens:
             log.debug(f"Node: {node}, token: {self.tokens[self.index]}")
@@ -329,31 +336,23 @@ def main():
         var = Variable(line[0], line[1], eval)
         log.info(f" {var.name}, {var.val}")
 
-    log.info(f"{Variable.vars}")
+    log.info(f"{Variable.var_names}")
     
-    var_list = [0]*Variable.var_index
     f = open(Obj.ASM_FILE, "a")
-    names = set()
 
-    for key, val in Variable.vars.items():
-        var_list[val] = key
-        if key.name not in names:
+    for name in Variable.var_names:
             if first:
-                print(f"{key.name}", file=f, end="")
+                print(f"{name}", file=f, end="")
                 first = False
-            elif key.name:
-                print(f",{key.name}", file=f, end="")
-        names.add(key.name)
+            else:
+                print(f",{name}", file=f, end="")
     
     print("\n\tenter", file=f)
     f.close()
 
     # print(var_list)
 
-    for var in var_list:
-        if var == 0:
-            continue
-        # print("var", var)
+    for var in Variable.expr:
         var.store()
 
     f = open(Obj.ASM_FILE, "a")
