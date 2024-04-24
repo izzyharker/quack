@@ -5,9 +5,11 @@ Run
 ```
 python parse.py <filename>.qk
 ```
-to parse the input file to assembly. The default output is "[filename].asm". There is a sample file provided called `ex.qk`, running the program with no additional arguments will parse that default file. 
+to parse the input file to assembly. The default output file is `Main.asm`. There is a sample file provided called `ex.qk`; running the program with no additional arguments will parse that default file. It contains a number of legitimate assignments followed by a number of horribly wrong assignments. Good luck!
 
-As instructed, there is no error checking. You can enter things such as `5abc`. What will the parser do? Nobody knows. You can also have fun lines such as `5 + "Hi" - False;`. This will certainly not run, but it will compile just fine. 
+As instructed, there is no error checking. You can enter things such as `5abc`. What will the parser do? Nobody knows. You can also have fun lines such as `5 + "Hi" - False;`. This will certainly not run, but it will parse just fine. 
+
+Test files should follow the syntax of ex.qk - that is, assignments and absolutely nothing else. I cannot promise that trying to be fancy ("correct") will not break the parser altogether. 
 
 ## Part 1
 In our second "sprint", we will translate a basic subset of the Quack language:  A sequence of assignment statements, including method calls on the built-in classes.  We will not create new classes or methods, but we will consider the sequence of assignment statements we create the body of a constructor for a special "Main" class (which we may give another name like "$Main" so that it can't conflict with any class a user could write).  
