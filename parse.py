@@ -199,6 +199,13 @@ class Tree():
         
         self.check_space()
 
+        # left parentheses
+        if re.match(Tree.types["LParen"], self.tokens[self.index:]):
+            self.eat()
+            node = self.E()
+            self.eat()
+            return node
+
         try:
             # look for a variable
             token = re.match(r"[^\s\)-+*/;]+", self.tokens[self.index:]).group()
@@ -227,13 +234,6 @@ class Tree():
             match = match.group()
             self.eat(Tree.types["Int"], len(match))
             return Int(int(match))
-
-        # left parentheses
-        elif re.match(Tree.types["LParen"], self.tokens[self.index:]):
-            self.eat()
-            node = self.E()
-            self.eat()
-            return node
 
         # and finally string
         match = re.match(Tree.types["String"], self.tokens[self.index:])
