@@ -11,23 +11,17 @@ As instructed, there is no error checking. You can enter things such as `5abc`. 
 
 Test files should follow the syntax of ex.qk - that is, assignments and absolutely nothing else. I cannot promise that trying to be fancy ("correct") will not break the parser altogether. 
 
-## Part 1
-In our second "sprint", we will translate a basic subset of the Quack language:  A sequence of assignment statements, including method calls on the built-in classes.  We will not create new classes or methods, but we will consider the sequence of assignment statements we create the body of a constructor for a special "Main" class (which we may give another name like "$Main" so that it can't conflict with any class a user could write).  
+## Part 2 - Mini-Quack
+Mini-quack is as much of Quack as we can get in a single method --- including control structures and type inference. 
 
-We will not include control flow (no if statements, no while statements) in this subset of Quack. 
+In this project, please provide a top-level README with complete build instructions. 
 
-For this subset, we will require each assignment to include a type declaration, like this: 
+Also provide a shell (bash) script called "quack" that ties together all the steps to compile and run a quack program.  If I type "quack ../MyTestCase.qk", I would like it to produce the assembly code, assemble it into a file in the OBJ directory, and then invoke the vm to run it.    I suggest but will not insist on also creating a script "quackc" that does all but the last step, i.e., it creates the OBJ/something.json file but does not execute it.   
 
-x: Int = 13 + y; 
+In Mini-Quack, type declarations are optional.   If we assign x = 7 + y, and y is an integer, then we will infer that x is an integer.  If x is assigned an integer value on one path through the method, and assigned a string value on another path through the method, then we will infer that the type of x is Obj  (the most specific class that could be either an integer or a string).  If we infer the type of x is Obj, but we see z = x + 7, then we will report a type error because Obj does not have a PLUS method. 
 
-Most of these type declarations will be optional in full Quack, but we are holding off on type inference until we get farther in the project.  We are also holding off on most other static checking.  It is up to the user to give us correct programs.  (In contrast, production compilers put a lot of effort into preventing certain kinds of errors, like type mismatches).   If the user program contains this statement: 
+There are a few features of Quack that we can't include until we have user-written classes and methods.  One of these is access to fields (e.g., x.f1 = y.z.f2), because none of the built-in types have accessible fields (also known as "instance variables").  I will also put off implementation of "typecase" statements for the next sprint. 
 
-x: Int = "Why would you " + "do this?" - 3; 
+Type inference in Quack is flow-insensitive:  We infer a single type for a variable throughout the whole method.  In other words, type inference does not depend on which path program execution follows through the control flow.  We will also have a flow-sensitive static analysis, which we will use to ensure that variables are initialized before they are used.   Flow sensitive analysis considers the potential state of a variable at each point in the program text (e.g., within a particular branch of an if statement).   We distinguish flow-sensitive (what state could x be in here?) from path-sensitive (what state could x be in given how I got here?).  For example, we will have only one summary state for x at a certain point in a loop, regardless of whether it is the first time through the loop or a subsequent time.    What we think of as "compilers" are typically scripts that tie together individual tools like this.  The Python interpreter works like the 'quack' script, and gcc, cc, clang etc. work like quackc, as does javac.  
 
-we will translate it without complaint.  It will probably cause car crashes, house fires, and seg faults, but nano-quack has no protections against any of that. 
-
-Even with only a sequence of assignment statements and no error checking, this is a substantial project.  You will need to write grammar for a good deal of Quack (I'll help).  You will need to keep track of local variables and their types.  You will need to "de-sugar" the algebraic notation into calls on methods (much like "magic methods" in Python).   
-
-Do not try to tackle this all at once.  Start really small ... even smaller than Nano-quack.  Start with Pico-quack and build up.  What exactly should be in Pico-quack?  Maybe just assignments to integer variables, with each variable being assigned to exactly once?   Maybe with just addition and subtraction?   The smaller you start, the easier your debugging will be, and the better you will be able to think through the problems you are solving. 
-
-For this project, a high degree of collaboration is permitted and encouraged.  It is ok to work together, but you must turn in your own code, and you must understand every line of the code you turn in.   Also you must document the collaboration in comments.  
+Please turn in a your github URL with your assignment three work merged into the main branch, then start a new branch for the following project, so that I can simply clone the main branch of your repository for grading.  
