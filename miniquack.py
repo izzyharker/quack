@@ -7,7 +7,7 @@ import quack_builtins as qk
 log.basicConfig(level=log.DEBUG)
 
 class ParseTree():
-    NORMAL, EOF, ERROR = range(3)
+    NORMAL, CALL, EOF, ERROR = range(4)
     var_names = []
     var_types: dict[str: int] = {}
 
@@ -62,9 +62,9 @@ class ParseTree():
         """
         integer = r"-?[1-9]\d*"
         string = r"\".*\""
-        var_name = r""
+        var_name = r"if"
         for var in qk.Variable.var_names:
-            var_name += rf"{var}|"
+            var_name += rf"|{var}"
         boolean = r"true|false"
 
         self.check_space()
@@ -83,15 +83,6 @@ class ParseTree():
             match = match.group()
             self.eat(boolean, len(match))
             return qk.Bool(match)
-
-        match = re.match(var_name, self.program[self.pc:]) 
-        if match is not None:
-            match = match.group()
-            self.eat(num_to_jump=len(match))
-            for v in qk.Variable.expr:
-                if v.name == match:
-                    return v
-            # self.error("NameError: Reference to Undefined Variable")
         
         match = re.match(string, self.program[self.pc:]) 
         if match is not None:
@@ -104,6 +95,29 @@ class ParseTree():
             match = match.group()
             self.eat(num_to_jump=len(match))
             return qk.Int(int(match))
+        
+        # check not a keyword
+        match = re.match(qk.keywords + r"[^\w^\_]", self.program)
+        if match is None:
+            # look for variable name
+            log.debug(f"variable ={self.program[self.pc:]}")
+            match = re.match(var_name, self.program[self.pc:])
+            if match is not None:
+                match = match.group()
+                log.debug(f"existing variable -{match}-")
+                for var in qk.Variable.expr:
+                    log.debug(f"checking -{match}- against -{var.name}-")
+                    if var.name == match:
+                        log.debug(f"found var {var}")
+                        self.eat(num_to_jump=len(match))
+                        return var
+            match = re.match(r"[\w\_]+", self.program[self.pc:])
+            if match is not None:
+                match = match.group()
+                log.debug(f"new variable -{match}-")
+                self.eat(num_to_jump=len(match))
+                return qk.Variable(match, qk.NOTHING, None)
+            # self.error("NameError: Reference to Undefined Variable")
 
         log.debug(f"Unrecognized literal {self.program[self.pc:self.pc+12]} - returning Nothing()")
         return qk.Nothing()
@@ -119,6 +133,13 @@ class ParseTree():
             if match is not None:
                 match = match.group()
                 self.eat(num_to_jump=len(match))
+                log.debug(f"match={match}")
+                if re.match(r"\(", self.program[self.pc]):
+                    self.state = ParseTree.CALL
+                    self.eat(r"\(")
+                    self.eat(r"\)")
+                    return qk.Call(None, match)
+                self.state = ParseTree.NORMAL
                 return match
             self.state = ParseTree.ERROR
             return None
@@ -192,19 +213,21 @@ class ParseTree():
         if self.program[self.pc] == ".":
             self.eat(r"\.")
             rhs = self.ident()
+            if self.state == ParseTree.CALL:
+                rhs.assign_var(expr)
+                log.debug(f"Calling {rhs.method} on {expr}")
+                self.state = ParseTree.NORMAL
+                return rhs
+            elif self.state == ParseTree.NORMAL:
+                return qk.Variable.var_names[expr.val]
 
-        if re.match(r"\(\)", self.program[self.pc:]):
-            self.eat()
-            self.eat()
-            return qk.Call(expr, rhs)
+        return expr
 
     def Statement(self):
         """
         l_expr [: class]? = r_expr ;
         r_expr "." method()
         """
-
-        # TODO: change literal for variables to check on evaluate intead of on parse
         l_expr = self.L_Expr()
         declared_type = qk.NOTHING
         if self.state is not ParseTree.EOF:
@@ -216,9 +239,10 @@ class ParseTree():
                 self.eat(r"=")
                 r_expr = self.R_Expr()
                 self.eat(";")
-                stmt = qk.Variable(l_expr, declared_type, r_expr)
+                l_expr.assign(r_expr, r_expr.type)
+                stmt = qk.Assign(l_expr, r_expr)
                 ParseTree.statements.append(stmt)
-                self.eat(";")
+                log.debug(f"{stmt}")
                 return
             
         ParseTree.statements.append(l_expr)

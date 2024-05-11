@@ -4,7 +4,6 @@ node_types = {OBJ: "OBJ", INT: "INT", NEGINT: "NEGINT", STRING: "STRING", BOOL: 
 var_types = {"Obj": OBJ, "Int": INT, "String": STRING, "Boolean": BOOL}
 keywords = r"class|if|while|and|typecase|def|elif|return|or|not|extends|else|String|Int|Obj|Boolean|true|false|Nothing|none"
 
-
 class Obj():
     ASM_FILE = "out.asm"
 
@@ -110,10 +109,17 @@ class Variable(Obj):
 
     def get_type(self) -> int:
         return self.type
+
+    def assign(self, value, type):
+        self.val = value
+        self.type = type
+    
+    def display(self):
+        return f"{self.name} = ({node_types[self.type]}, {self.val})"
     
     def __str__(self):
-        return f"{self.name}: {node_types[self.type]}"
-    
+        return f"{self.name}"
+
     def store(self) -> None:
         self.val.evaluate()
         with open(Obj.ASM_FILE, "a") as f:
@@ -121,17 +127,40 @@ class Variable(Obj):
         f.close()
 
     def evaluate(self) -> None:
+        if self in Variable.expr:
+            with open(Obj.ASM_FILE, "a") as f:
+                print(f"\tload {self.name}", file=f)
+            f.close()
+        else:
+            raise Exception(f"Call to unassigned variable {self.name}")
+
+class AST():
+    def __init__(self):
+        pass
+
+class Assign(AST):
+    def __init__(self, var: Variable | str, val: Obj):
+        self.var = var
+        self.val = val
+
+    def __str__(self):
+        return f"Node: Assign {self.var} = {self.val}"
+    
+    def evaluate(self):
+        self.val.evaluate()
         with open(Obj.ASM_FILE, "a") as f:
-            print(f"\tload {self.name}", file=f)
+            print(f"\tstore {self.var}", file=f)
         f.close()
 
 class Operator(Obj):
-    # operator tree
+    # operator node
+    # specifically for Int classes
     ops = {"+": "plus", "-": "minus", "*": "multiply", "/": "divide"}
 
     def __init__(self, left: Obj, right: Obj, op: str):
         self.left = left
         self.right = right
+        self.type = INT
         if op in "+-*/":
             self.token = op
             self.op = Operator.ops[op]
@@ -155,9 +184,17 @@ class Operator(Obj):
     
 class Call():
     def __init__(self, var: Obj, method: str):
-        self.var = var
-        self.type = var.type
+        self.var = None
+        self.type = None
+        if var is not None:
+            self.var = var
+            self.type = var.type
+
         self.method = method
+
+    def assign_var(self, expr: Obj):
+        self.var = expr
+        self.type = expr.type
 
     def __str__(self):
         return f"{self.var}.{self.method}()"
@@ -187,6 +224,6 @@ class Call():
             raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
         
         with open(Obj.ASM_FILE, "a") as f:
-            print(f"\tconst {self.var}", file = f)
+            self.var.evaluate()
             print(f"\tcall {calling}:{self.method}", file=f)
         f.close()

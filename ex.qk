@@ -1,12 +1,12 @@
 x: Int = (-55 + 5);
 y: String = "Hi";
 
-tru: Bool = True;
+tru: Boolean = true;
 
 z: Int = 5 + 3 * 8 / 2;
 
 yay: Int = y+ x - 3*(-52 + 7* 12 - tru);
 
-x: String = "Wor ld" - False + (5*3);
+x: String = "Wor ld" - false + (5*3);
 
-bad: Int = 5 * 3 - True + 4;
+bad: Int = 5 * 3 - true + 4;
