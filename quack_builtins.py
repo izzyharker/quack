@@ -1,6 +1,6 @@
 # define node types for tree
 OBJ, INT, NEGINT, STRING, BOOL, NOTHING = range(6)
-node_types = {OBJ: "OBJ", INT: "INT", NEGINT: "NEGINT", STRING: "STRING", BOOL: "BOOL", NOTHING: "NOTHING"}
+node_types = {OBJ: "Obj", INT: "Int", NEGINT: "Negint", STRING: "String", BOOL: "Bool", NOTHING: "Nothing"}
 var_types = {"Obj": OBJ, "Int": INT, "String": STRING, "Boolean": BOOL}
 keywords = r"class|if|while|and|typecase|def|elif|return|or|not|extends|else|String|Int|Obj|Boolean|true|false|Nothing|none"
 
@@ -121,7 +121,6 @@ class Variable(Obj):
         return f"{self.name}"
 
     def store(self) -> None:
-        self.val.evaluate()
         with open(Obj.ASM_FILE, "a") as f:
             print(f"\tstore {self.name}", file=f)
         f.close()
@@ -133,97 +132,3 @@ class Variable(Obj):
             f.close()
         else:
             raise Exception(f"Call to unassigned variable {self.name}")
-
-class AST():
-    def __init__(self):
-        pass
-
-class Assign(AST):
-    def __init__(self, var: Variable | str, val: Obj):
-        self.var = var
-        self.val = val
-
-    def __str__(self):
-        return f"Node: Assign {self.var} = {self.val}"
-    
-    def evaluate(self):
-        self.val.evaluate()
-        with open(Obj.ASM_FILE, "a") as f:
-            print(f"\tstore {self.var}", file=f)
-        f.close()
-
-class Operator(Obj):
-    # operator node
-    # specifically for Int classes
-    ops = {"+": "plus", "-": "minus", "*": "multiply", "/": "divide"}
-
-    def __init__(self, left: Obj, right: Obj, op: str):
-        self.left = left
-        self.right = right
-        self.type = INT
-        if op in "+-*/":
-            self.token = op
-            self.op = Operator.ops[op]
-        else:
-            raise SyntaxError(f"op {op} does not exist in Quack!")
-
-    def evaluate(self):
-        self.left.evaluate()
-        self.right.evaluate()
-
-        # print to file
-        with open(Obj.ASM_FILE, "a") as f:
-            print(f"\tcall Int:{self.op}", file=f)
-        f.close()
-        # print(f"\tcall Int:{Operator.ops[self.op]}")
-        
-        pass
-
-    def __str__(self):
-        return f"({self.left} {self.token} {self.right})"
-    
-class Call():
-    def __init__(self, var: Obj, method: str):
-        self.var = None
-        self.type = None
-        if var is not None:
-            self.var = var
-            self.type = var.type
-
-        self.method = method
-
-    def assign_var(self, expr: Obj):
-        self.var = expr
-        self.type = expr.type
-
-    def __str__(self):
-        return f"{self.var}.{self.method}()"
-    
-    def evaluate(self) -> None:
-        """
-        Need to fix this for variables
-        """
-        calling = ""
-        if self.type == INT:
-            if self.method not in Int.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "Int"
-        elif self.type == OBJ:
-            if self.method not in Obj.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "Obj"
-        elif self.type == BOOL:
-            if self.method not in Bool.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "Bool"
-        elif self.type == STRING:
-            if self.method not in String.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "String"
-        elif self.type == NOTHING:
-            raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-        
-        with open(Obj.ASM_FILE, "a") as f:
-            self.var.evaluate()
-            print(f"\tcall {calling}:{self.method}", file=f)
-        f.close()
