@@ -1,0 +1,3 @@
+if (true and (1 < 2)) {
+    "hi".print();
+}

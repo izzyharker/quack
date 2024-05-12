@@ -1,0 +1,6 @@
+x = 7;
+x.print();
+
+5.print();
+
+"Hello world\n".print();
