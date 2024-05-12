@@ -1,0 +1,8 @@
+if (true) {
+    x: Int = 7;
+    y = x + 4;
+    y.print();
+}
+else {
+    x = "hi";
+}
