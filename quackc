@@ -7,6 +7,4 @@ python quack.py $1
 echo "Compiling..."
 cd vm
 python assemble.py ../$filename.asm ./OBJ/$filename.json
-echo "done. " 
-echo "Running..."
-./bin/tiny_vm $filename
+echo "Successfully assembled $filename.qk! OBJ code can be found in ./vm/OBJ/$filename.json"
