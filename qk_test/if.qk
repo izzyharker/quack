@@ -1,7 +1,0 @@
-if (1 > 2 and true) {
-    x: Int = 7;
-    y = x + 4;
-}
-else {
-    x = "hi";
-}

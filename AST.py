@@ -20,32 +20,32 @@ class ASTNode():
         self.type = NOTHING
     
     def gen_if_label():
-        ret = f"_{ASTNode.if_stmts}"
+        ret = f"{ASTNode.if_stmts}"
         ASTNode.if_stmts += 1
         return ret
     
     def gen_elif_label():
-        ret = f"_{ASTNode.elif_stmts}"
+        ret = f"{ASTNode.elif_stmts}"
         ASTNode.elif_stmts += 1
         return ret
     
     def gen_else_label():
-        ret = f"_{ASTNode.else_stmts}"
+        ret = f"{ASTNode.else_stmts}"
         ASTNode.else_stmts += 1
         return ret
     
     def gen_loop_label():
-        ret = f"_{ASTNode.loops}"
+        ret = f"{ASTNode.loops}"
         ASTNode.loops += 1
         return ret
     
     def fetch_and_update_block_label():
-        ret = f"block_{ASTNode.block_label}"
+        ret = f"block{ASTNode.block_label}"
         ASTNode.block_label += 1
         return ret
     
     def gen_boolcomp_label():
-        ret = f"_{ASTNode.boolcomp_label}"
+        ret = f"{ASTNode.boolcomp_label}"
         ASTNode.boolcomp_label += 1
         return ret
 
@@ -129,7 +129,7 @@ class IntComp(ASTNode):
             return None
     
     def evaluate(self):
-        if self.op == ">":
+        if self.op == "<":
             self.right.evaluate()
             self.left.evaluate()
         else:
@@ -354,16 +354,21 @@ class While(ASTNode):
     def evaluate(self):
         loop = ASTNode.gen_loop_label()
         with open(Obj.ASM_FILE, "a+") as f:
-            print(f"loop{loop}:", file=f)
+            # print(f"loop{loop}:", file=f)
+            print(f"\tjump startl{loop}", file=f)
+            print(f"startl{loop}:", file=f)
         f.close()
         self.cond = Not(self.cond)
         self.cond.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print(f"\tjump_if end_loop{loop}", file=f)
+            # print(f"\tjump_if end_loop{loop}",  file=f)
+            print(f"\tjump_if endl{loop}", file=f)
         f.close()
         self.statement.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print(f"\tjump {loop}", file=f)
-            print(f"end_loop{loop}:", file=f)
+            # print(f"\tjump {loop}", file=f)
+            print(f"\tjump startl{loop}", file=f)
+            # print(f"end_loop{loop}:", file=f)
+            print(f"endl{loop}:", file=f)
         f.close()
         

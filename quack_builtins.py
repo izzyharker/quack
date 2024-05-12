@@ -76,9 +76,9 @@ class Bool(Obj):
     def evaluate(self):
         with open(Obj.ASM_FILE, "a") as f:
             if self.val:
-                print(f"\tconst 1", file=f)
+                print(f"\tconst true", file=f)
             else:
-                print(f"\tconst 0", file=f)
+                print(f"\tconst false", file=f)
         f.close()
 
 class Nothing(Obj):
