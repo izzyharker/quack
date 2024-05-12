@@ -9,8 +9,45 @@ def ASTError(which: int, msg: str):
         raise SyntaxError(msg)
 
 class ASTNode():
+    if_stmts = 0
+    elif_stmts = 0
+    else_stmts = 0
+    loops = 0
+    block_label = 0
+    boolcomp_label = 0
+
     def __init__(self):
         self.type = NOTHING
+    
+    def gen_if_label():
+        ret = f"_{ASTNode.if_stmts}"
+        ASTNode.if_stmts += 1
+        return ret
+    
+    def gen_elif_label():
+        ret = f"_{ASTNode.elif_stmts}"
+        ASTNode.elif_stmts += 1
+        return ret
+    
+    def gen_else_label():
+        ret = f"_{ASTNode.else_stmts}"
+        ASTNode.else_stmts += 1
+        return ret
+    
+    def gen_loop_label():
+        ret = f"_{ASTNode.loops}"
+        ASTNode.loops += 1
+        return ret
+    
+    def fetch_and_update_block_label():
+        ret = f"block_{ASTNode.block_label}"
+        ASTNode.block_label += 1
+        return ret
+    
+    def gen_boolcomp_label():
+        ret = f"_{ASTNode.boolcomp_label}"
+        ASTNode.boolcomp_label += 1
+        return ret
 
 class Block(ASTNode):
     def __init__(self, statements: list[ASTNode | Obj]):
@@ -76,22 +113,34 @@ class IntComp(ASTNode):
             ASTError(TYPE, "Comparison can only be executed for Int/Int.")
 
         if op in [">", "<", "==", "<=", ">="]:
-            self.token = op
+            self.op = op
         else:
             raise SyntaxError(f"op {op} does not exist in Quack!")
         
     def __str__(self):
-        return f"IntComp: {self.left} {self.token} {self.right}"
+        return f"IntComp: {self.left} {self.op} {self.right}"
+    
+    def get_first_function(self):
+        if self.op in ["<", ">"]:
+            return "less"
+        elif self.op == "==":
+            return "equals"
+        else:
+            return None
     
     def evaluate(self):
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tSTART INTCOMP", file=f)
-        f.close()
-        self.left.evaluate()
-        self.right.evaluate()
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tEND INTCOMP", file=f)
-        f.close()
+        if self.op == ">":
+            self.right.evaluate()
+            self.left.evaluate()
+        else:
+            self.left.evaluate()
+            self.right.evaluate()
+
+        func = self.get_first_function()
+        if func is not None:
+            with open(Obj.ASM_FILE, "a+") as f:
+                print(f"\tcall Int:{func}", file=f)
+            f.close()
 
 class BoolComp(ASTNode):
     def __init__(self, left: Expression | Int, right: Expression | Int, op: str):
@@ -100,31 +149,32 @@ class BoolComp(ASTNode):
         self.type = BOOL
 
         if right.type != BOOL or left.type != BOOL:
-            ASTError(TYPE, "Comparison can only be executed for Boolean values.")
+            ASTError(TYPE, f"Comparison can only be executed for Boolean values, not {node_types[self.left.type]}, {node_types[self.right.type]}.")
 
         if op in ["and", "or"]:
-            self.token = op
+            self.op = op
         else:
             raise SyntaxError(f"op {op} does not exist in Quack!")
         
     def __str__(self):
-        return f"BoolComp: {self.left} {self.token} {self.right}"
+        return f"BoolComp: {self.left} {self.op} {self.right}"
     
     def evaluate(self):
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tSTART BOOLCOMP", file=f)
-        f.close()
         self.left.evaluate()
         self.right.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print("\tEND BOOLCOMP", file=f)
+            print("\tcall Bool:equals", file=f)
         f.close()
 
-# TODO
 class Not(ASTNode):
     def __init__(self, expr: IntComp | Bool):
-        self.expr = expr
-    
+        if isinstance(expr, IntComp):
+            self.expr = IntComp(expr.right, expr.left, expr.op)
+        elif isinstance(expr, BoolComp):
+            self.expr = BoolComp(expr.right, expr.left, expr.op)
+        else:
+            ASTNode.error(TYPE, "Not can only be applied to boolean expressions.")
+
     def __str__(self):
         return f"{self.expr}"
 
@@ -191,11 +241,11 @@ class Call(ASTNode):
         
         with open(Obj.ASM_FILE, "a") as f:
             self.var.evaluate()
-            print(f"\tcall {calling}:{self.method}", file=f)
+            print(f"\tcall {calling}:{self.method}\n\tpop", file=f)
         f.close()
 
 class IfNode(ASTNode):
-    def __init__(self, cond: Expression, block: Block):
+    def __init__(self, cond: IntComp | BoolComp, block: Block):
         self.statement = block
         self.cond = cond
 
@@ -206,17 +256,7 @@ class IfNode(ASTNode):
         return f"If: {self.cond}"
     
     def evaluate(self):
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tSTART IF", file=f)
-        f.close()
-        self.cond.evaluate()
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tcmp 0", file=f)
-        f.close()
-        self.statement.evaluate()
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tEND IF", file=f)
-        f.close()
+        pass
 
 
 class ElifNode(ASTNode):
@@ -231,14 +271,7 @@ class ElifNode(ASTNode):
         return f"Elif: {self.cond}"
     
     def evaluate(self):
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tSTART ELIF", file=f)
-        f.close()
-        self.cond.evaluate()
-        self.statement.evaluate()
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tEND ELIF", file=f)
-        f.close()
+        pass
 
 class ElseNode(ASTNode):
     def __init__(self, block: Block):
@@ -248,13 +281,7 @@ class ElseNode(ASTNode):
         return "Else: "
     
     def evaluate(self):
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tSTART ELSE", file=f)
-        f.close()
         self.statement.evaluate()
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\tEND ELSE", file=f)
-        f.close()
 
 
 class Conditional(ASTNode):
@@ -271,15 +298,50 @@ class Conditional(ASTNode):
         return f"Conditional: if ({self.ifnode.cond}); elif ({self.elifnode}); else ({self.elsenode})"
     
     def evaluate(self):
-        self.ifnode.evaluate()
+        block = ASTNode.fetch_and_update_block_label()
+        iflabel = ASTNode.gen_if_label()
+        self.ifnode.cond.evaluate()
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\tjump_if if_clause{iflabel}", file=f)
+        f.close()
+        eliflabels = []
         if self.elifnode is not None:
             for elf in self.elifnode:
-                elf.evaluate()
+                eliflabels.append(ASTNode.gen_elif_label())
+                elf.cond.evaluate()
+                with open(Obj.ASM_FILE, "a+") as f:
+                    print(f"\tjump_if elif_clause{eliflabels[-1]}", file=f)
+                f.close()
+
         if self.elsenode is not None:
             self.elsenode.evaluate()
+            with open(Obj.ASM_FILE, "a+") as f:
+                print(f"\tjump {block}", file=f)
+            f.close()
+        
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"if_clause{iflabel}:", file=f)
+        f.close()
+        self.ifnode.statement.evaluate()
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\tjump {block}", file=f)
+        f.close()
+
+        for label, elf in zip(eliflabels, self.elifnode):
+            with open(Obj.ASM_FILE, "a+") as f:
+                print(f"if_clause{label}:", file=f)
+            f.close()
+            elf.statement.evaluate()
+            with open(Obj.ASM_FILE, "a+") as f:
+                print(f"\tjump {block}", file=f)
+            f.close()
+
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"{block}:", file=f)
+        f.close()
 
 class While(ASTNode):
-    def __init__(self, cond: Expression, block: Block):
+    def __init__(self, cond: IntComp | BoolComp, block: Block):
         self.statement = block
         self.cond = cond
 
@@ -290,17 +352,18 @@ class While(ASTNode):
         return f"While: ({self.cond}) {self.statement}"
     
     def evaluate(self):
+        loop = ASTNode.gen_loop_label()
         with open(Obj.ASM_FILE, "a+") as f:
-            print("\tSTART WHILE", file=f)
-            print("loop:", file=f)
+            print(f"loop{loop}:", file=f)
         f.close()
+        self.cond = Not(self.cond)
         self.cond.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print("\tjmp end", file=f)
+            print(f"\tjump_if end_loop{loop}", file=f)
         f.close()
         self.statement.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print("\tjmp start", file=f)
-            print("\tEND WHILE", file=f)
+            print(f"\tjump {loop}", file=f)
+            print(f"end_loop{loop}:", file=f)
         f.close()
         

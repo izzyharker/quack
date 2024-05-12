@@ -185,6 +185,19 @@ class ParseTree():
         
         # print("T: ", node)
         return node
+    
+    def R_intcomp(self):
+        node = self.rexpr_times()
+
+        match = re.match(r"<|>|==|<=|>=", self.program[self.pc]) 
+        if match is not None:
+            match = match.group()
+
+            self.eat(match, len(match))
+            node = ast.IntComp(node, self.R_Expr(), match)
+        
+        log.debug(f"Intcomp: {node}")
+        return node
 
     def R_Expr(self):
         """ 
@@ -197,7 +210,7 @@ class ParseTree():
             node = ast.Not(self.R_Expr())
             return node
         
-        node = self.rexpr_times()
+        node = self.R_intcomp()
         # if self.pc < self.len:
         #     log.debug(f"Node: {node}, token: {self.program[self.pc]}")
 
@@ -209,16 +222,16 @@ class ParseTree():
             log.debug(f"found token: {token}")
             node = ast.Expression(node, self.rexpr_times(), token)
 
-        match = re.match(r"<|>|==|<=|>=", self.program[self.pc]) 
-        if match is not None:
-            match = match.group()
-            self.eat(match, len(match))
-            node = ast.IntComp(node, self.R_Expr(), match)
+        return node
+
+    def R_andor(self):
+        node = self.R_Expr()
 
         match = re.match(r"and|or", self.program[self.pc:])
         if match is not None:
             match = match.group()
             self.eat(match, len(match))
+            log.debug(f"Boolcomp: {node}")
             node = ast.BoolComp(node, self.R_Expr(), match)
 
         # print("E: ", node)
@@ -229,7 +242,7 @@ class ParseTree():
         """
         ident | ident.ident
         """
-        expr = self.R_Expr()
+        expr = self.R_andor()
         log.debug(f"expr: {expr}")
         rhs = None
         if self.program[self.pc] == ".":
@@ -250,7 +263,7 @@ class ParseTree():
         block = []
         if re.match(r"elif", self.program[self.pc:]) is not None:
             self.eat(r"elif", num_to_jump=4)
-            elifcond = self.R_Expr()
+            elifcond = self.R_andor()
             log.debug(f"elif condition located: {elifcond}")
             if re.match(r";", self.program[self.pc]) is not None:
                 # else
@@ -280,17 +293,23 @@ class ParseTree():
     def IfBlock(self) -> ast.IfNode:
         if re.match(r"if", self.program[self.pc:]) is not None:
             self.eat(r"if", 2)
-            ifcond = self.R_Expr()
-            log.debug(f"If condition located: {ifcond}")
-            block = []
-            if re.match(r";", self.program[self.pc]) is not None:
-                # else
-                self.eat(r";")
+            if re.match(r"\(.*\)", self.program[self.pc:]):
+                self.eat(r"\(", 1)
+                ifcond = self.R_andor()
+                log.debug(f"If condition located: {ifcond}")
+                block = []
+                if re.match(r"\)", self.program[self.pc:]):
+                    self.eat(r"\)", 1)
+                if re.match(r";", self.program[self.pc]) is not None:
+                    # else
+                    self.eat(r";")
+                else:
+                    self.eat(r"\{")
+                    self.Statement_Block(end_char = r"\}", block=block)
+                ifnode = ast.IfNode(ifcond, ast.Block(block))
+                return ifnode
             else:
-                self.eat(r"\{")
-                self.Statement_Block(end_char = r"\}", block=block)
-            ifnode = ast.IfNode(ifcond, ast.Block(block))
-            return ifnode
+                self.error("Missing parentheses around IF condition")
 
     def Conditional(self) -> ast.Conditional:
         ifnode = self.IfBlock()
@@ -301,7 +320,7 @@ class ParseTree():
         return ast.Conditional(ifnode, elifnodes, elsenode)
 
     def While(self) -> ast.While:
-        whilecond = self.R_Expr()
+        whilecond = self.R_andor()
         log.debug(f"While condition located: {whilecond}")
         block = []
         if re.match(r";", self.program[self.pc]) is not None:
@@ -347,7 +366,7 @@ class ParseTree():
                 
                 if self.program[self.pc] == "=":
                     self.eat(r"=")
-                    r_expr = self.R_Expr()
+                    r_expr = self.R_andor()
                     self.eat(";")
                     l_expr.assign(r_expr, r_expr.type)
                     stmt = ast.Assign(l_expr, r_expr, declared_type)
