@@ -1,4 +1,4 @@
-if (1) {
+if (1 > 2 and true) {
     x: Int = 7;
     y = x + 4;
 }
