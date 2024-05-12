@@ -1,0 +1,12 @@
+*INFO* : This is the tiny VM
+
+*INFO* : Loading ./OBJ/TestCounter.json
+*INFO* : Class TestCounter extends Obj
+*INFO* : Class TestCounter has 4 methods and 0 fields
+*INFO* : Requires loading Counter
+*INFO* : Loading ./OBJ/Counter.json
+*INFO* : Class Counter extends Obj
+*INFO* : Class Counter has 6 methods and 1 fields
+*INFO* : Executing TestCounter
+
+*INFO* : Ran

@@ -1,0 +1,12 @@
+*INFO* : This is the tiny VM
+
+*INFO* : Loading ./OBJ/UseThis.json
+*INFO* : Class UseThis extends Obj
+*INFO* : Class UseThis has 4 methods and 0 fields
+*INFO* : Requires loading NewThis
+*INFO* : Loading ./OBJ/NewThis.json
+*INFO* : Class NewThis extends Obj
+*INFO* : Class NewThis has 5 methods and 1 fields
+*INFO* : Executing UseThis
+
+*INFO* : Ran

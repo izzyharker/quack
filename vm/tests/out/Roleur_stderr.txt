@@ -1,0 +1,8 @@
+*INFO* : This is the tiny VM
+
+*INFO* : Loading ./OBJ/Roleur.json
+*INFO* : Class Roleur extends Obj
+*INFO* : Class Roleur has 4 methods and 0 fields
+*INFO* : Executing Roleur
+
+*INFO* : Ran

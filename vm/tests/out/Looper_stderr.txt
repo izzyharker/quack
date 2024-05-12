@@ -1,0 +1,12 @@
+*INFO* : This is the tiny VM
+
+*INFO* : Loading ./OBJ/Looper.json
+*INFO* : Class Looper extends Obj
+*INFO* : Class Looper has 4 methods and 0 fields
+*INFO* : Requires loading Counter
+*INFO* : Loading ./OBJ/Counter.json
+*INFO* : Class Counter extends Obj
+*INFO* : Class Counter has 6 methods and 1 fields
+*INFO* : Executing Looper
+
+*INFO* : Ran

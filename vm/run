@@ -1,0 +1,8 @@
+# Bash script which runs the calculator pipeline
+echo "Running calc.py..."
+python calc.py
+echo "Generating object code..."
+python assemble.py Calculator.asm ./OBJ/Calculator.json
+echo "done"
+echo "Running program..."
+./bin/tiny_vm Calculator

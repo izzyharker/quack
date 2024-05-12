@@ -1,0 +1,50 @@
+{
+    "class_name": "Calculator",
+    "super": "Obj",
+    "imports": [
+        "Calculator",
+        "Obj",
+        "Int"
+    ],
+    "methods": [
+        "$constructor",
+        "string",
+        "print",
+        "equals"
+    ],
+    "fields": [],
+    "n_fields": 0,
+    "n_methods": 4,
+    "n_inherited": 4,
+    "constants": [
+        {
+            "kind": "i",
+            "value": "5"
+        },
+        {
+            "kind": "i",
+            "value": "5"
+        }
+    ],
+    "code": [
+        {
+            "name": "$constructor",
+            "slot": 0,
+            "code": [
+                8,
+                1,
+                4,
+                1,
+                0,
+                1,
+                1,
+                2,
+                5,
+                10,
+                3,
+                5,
+                0
+            ]
+        }
+    ]
+}

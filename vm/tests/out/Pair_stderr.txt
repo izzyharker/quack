@@ -1,0 +1,8 @@
+*INFO* : This is the tiny VM
+
+*INFO* : Loading ./OBJ/Pair.json
+*INFO* : Class Pair extends Obj
+*INFO* : Class Pair has 5 methods and 2 fields
+*INFO* : Executing Pair
+
+*INFO* : Ran
