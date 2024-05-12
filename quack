@@ -1,0 +1,7 @@
+echo "Assembling file\n"
+python quack.py qk_test/Intcmp.qk
+echo "Compiling..."
+cd vm
+python assemble.py ../Intcmp.asm ./OBJ/Intcmp.json
+echo "Running..."
+./bin/tiny_vm Intcmp

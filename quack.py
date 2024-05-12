@@ -415,11 +415,16 @@ def main():
     if len(sys.argv) > 1:
         file = sys.argv[1]
     else:
-        file = "method.qk"
+        file = "ex.qk"
     # read quack
 
+    path = ""
     out_file = file.split(".")[0]
+    if file.startswith("qk_test/"):
+        path = "qk_test/"
+        out_file = file.split("/")[1].split(".")[0]
 
+    out_file = out_file[0].upper() + out_file[1:]
     quack = []
 
     assignment = r"\w+:"
@@ -445,7 +450,7 @@ def main():
 
     # write header information
     f = open(qk.Obj.ASM_FILE, "a")
-    print(".class Main:Obj", file=f)
+    print(f".class {out_file}:Obj", file=f)
     print(".method $constructor", file=f)
     print("\t.local ", file=f, end="")
 
