@@ -3,10 +3,16 @@ extension="#{filename##*.}"
 filename="${filename%.*}"
 
 echo "Assembling $filename\n"
-python quack.py $1
-echo "Compiling..."
-cd vm
-python assemble.py ../$filename.asm ./OBJ/$filename.json
-echo "done. " 
-echo "Running..."
-./bin/tiny_vm $filename
+# python quack.py $1 ;
+# if we successfully assembled, continue
+if python quack.py $1 ; then 
+    echo "Successfully assembled $filename\n";
+    echo "Compiling...";
+    cd vm;
+    python assemble.py ../$filename.asm ./OBJ/$filename.json;
+    echo "done. " ;
+    echo "Running...";
+    ./bin/tiny_vm $filename;
+else
+    echo "Error in quack code ^^^"
+fi

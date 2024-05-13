@@ -7,6 +7,7 @@ def ASTError(which: int, msg: str):
         raise TypeError(msg)
     elif which == SYNTAX:
         raise SyntaxError(msg)
+    exit(1)
 
 class ASTNode():
     if_stmts = 0
@@ -102,7 +103,7 @@ class Expression(ASTNode):
     def __str__(self):
         return f"Expression: ({self.left} {self.token} {self.right})"
 
-# come back to this - not sure what the assemble is supposed to look like
+# TODO: fix assemble for intcomp and and/or - logic isn't quite right but will come back to it
 class IntComp(ASTNode):
     def __init__(self, left: Expression | Int, right: Expression | Int, op: str):
         self.left = left
@@ -241,7 +242,7 @@ class Call(ASTNode):
         
         with open(Obj.ASM_FILE, "a") as f:
             self.var.evaluate()
-            print(f"\tcall {calling}:{self.method}\n\tpop", file=f)
+            print(f"\tcall {calling}:{self.method}", file=f)
         f.close()
 
 class IfNode(ASTNode):

@@ -196,7 +196,9 @@ class ParseTree():
             self.eat(match, len(match))
             node = ast.IntComp(node, self.R_Expr(), match)
         
-        log.debug(f"Intcomp: {node}")
+            log.debug(f"Intcomp: {node}")
+        else:
+            log.debug(f"{node}")
         return node
 
     def R_Expr(self):

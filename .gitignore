@@ -1,3 +1,4 @@
 docs
 ./*.qk
 *.asm
+__pycache__/

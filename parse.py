@@ -87,7 +87,7 @@ class Variable(Obj):
     var_names: list[str] = []
     var_index = 0
 
-    def __init__(self, name: str, given_type: str, value: Obj):
+    def __init__(self, name: str, given_type: int, value: Obj):
         self.name = name
         self.val = value
         self.type = var_types[given_type]
@@ -142,23 +142,41 @@ class Operator(Obj):
     def __str__(self):
         return f"({self.left} {self.token} {self.right})"
 
-"""
-grammar
+class Lexer():
+    BUILTINS = [r"(class|if|while|and|typecase|def|elif|return|or|extends|else|not)[\s\(\{]", r"(String|Int|Boolean|Nothing)[\s\(\{]", r"(true|false|none)[;\s]"]
 
-assign = '
-start -> var: [type] = sum;
+    variable_names = []
 
-sum -> sum + prod (add)
-sum -> sum - prod (minus)
 
-prod -> prod * prod (times)
-prod -> prod / prod (divide)
-prod -> num
-'
-"""
+
+    def __init__(self, input: list[str]):
+        """
+        takes input (list of lines in the program) and provides a get_next_token method for the tree class
+        """
+        self.input = input
+        self.current_line = 0
+        self.line_index = 0
+        self.num_lines = len(input) 
+
+        self.get_next_token()
+
+    def get_next_token(self):
+        # first check if we have one of these things
+        for match_cat in Lexer.BUILTINS:
+            match = re.match(match_cat, self.input[self.current_line][self.line_index])
+            if match is not None:
+                return match.group()
+            
+        
+
+        
 
 class Tree():
     types = {"Int": r"-?\d+", "String": r"\".*\"", "Bool": r"True|False", "LParen": r"\(.*\)?", "RParen": r"\(?.*\)"}
+    BUILTINS = [r"(class|if|while|and|typecase|def|elif|return|or|extends|else|not)[\s\(\{]", r"(String|Int|Boolean|Nothing)[\s\(\{]", r"(true|false|none)[;\s]"]
+
+    variable_names = []
+
 
     def __init__(self, expr: list[str]):
         self.index = 0
@@ -182,6 +200,13 @@ class Tree():
                 return
             token = self.tokens[self.index]
             log.debug(f"New token: {self.tokens[self.index]}")
+
+    def get_next_token(self):
+        # first check if we have one of these things
+        for match_cat in Lexer.BUILTINS:
+            match = re.match(match_cat, self.input[self.current_line][self.line_index])
+            if match is not None:
+                return match.group()
     
     def eat(self, expect: str = r".*", num_to_jump: int = 1):
         # print("eat")
@@ -218,7 +243,7 @@ class Tree():
                         return Variable.expr[i]
         except:
             None
-        
+
         # then check bool
         match = re.match(Tree.types["Bool"], self.tokens[self.index:])
         if match is not None:

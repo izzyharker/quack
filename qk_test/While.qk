@@ -3,5 +3,6 @@ x.print();
 
 while (x < 10) {
     "x is less than 10!\n".print();
+    x.print();
     x: Int = x + 1;
 }
