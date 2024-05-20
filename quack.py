@@ -45,21 +45,35 @@ class ParseTree():
                 self.state = ParseTree.EOF
                 return
             token = self.program[self.pc]
+
+    def check_comment(self) -> None:
+        match = re.match(r"//.*\n", self.program[self.pc:])
+        if match is not None:
+            match = match.group()
+            self.eat(r"//.*\n", len(match))
+            return
+        
+        match = re.match(r"/\*.*\*/", self.program[self.pc:])
+        if match is not None:
+            match = match.group()
+            self.eat(r"/\*.*\*/", len(match))
+            return
     
-    def eat(self, expect: str = r".", num_to_jump: int = 1):
+    def eat(self, expect: str = r".", num_to_jump: int = 1) -> None:
         # print("eat")
         if self.pc < self.len:
             match = re.match(expect, self.program[self.pc:])
             if match is not None:
                 self.pc += num_to_jump
                 self.check_space()
+                self.check_comment()
             else:
                 print("Error at:", self.program[self.pc:])
                 self.state = ParseTree.ERROR
                 self.error(f"Expected token {expect} not found in {self.program[self.pc:]}")
         else:
             self.state = ParseTree.EOF
-            return
+        return
 
     def literal(self):
         """
@@ -141,9 +155,7 @@ class ParseTree():
                 log.debug(f"match={match}")
                 if re.match(r"\(", self.program[self.pc]):
                     self.state = ParseTree.CALL
-                    self.eat(r"\(")
-                    self.eat(r"\)")
-                    return ast.Call(None, match)
+                    return match
                 self.state = ParseTree.NORMAL
                 return match
             self.state = ParseTree.ERROR
@@ -252,6 +264,9 @@ class ParseTree():
             log.debug(f"at {self.program[self.pc:self.pc + 12]}")
             rhs = self.ident()
             if self.state == ParseTree.CALL:
+                self.eat(r"\(")
+                self.eat(r"\)")
+                rhs = ast.Call(None, rhs)
                 rhs.assign_var(expr)
                 log.debug(f"Calling {rhs.method} on {expr}")
                 self.state = ParseTree.NORMAL
@@ -342,6 +357,7 @@ class ParseTree():
             statement
         }
         """
+        self.check_comment()
         if re.match(r"if[\s\(]", self.program[self.pc:]):
             node = self.Conditional()
             if nested is None:
@@ -408,10 +424,23 @@ class ParseTree():
 
     # for later
     def Class(self):
-        pass
+        match = re.match(r"class", self.program[self.pc:])
+        # this is a bit redundant but whatever
+        if match is not None:
+            self.eat(r"class", 5)
+            classname = self.ident()
+            # get the function arguments
+            self.eat(r"\(", 1)
+            args = self.Args()
+            self.eat(r"\)", 1)
 
     def evaluate(self):
-        return self.Statement_Block()
+        # evaluate 0 or more class statements
+        while self.pc < self.len and re.match(r"class", self.program[self.pc:]) is not None:
+            self.Class()
+        
+        # followed by a statement block
+        self.Statement_Block()
 
 def main():
     if len(sys.argv) > 1:

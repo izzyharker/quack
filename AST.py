@@ -66,7 +66,6 @@ class Block(ASTNode):
 
 class Expression(ASTNode):
     # expression node
-    # specifically for Int classes
     ops = {"+": "plus", "-": "minus", "*": "multiply", "/": "divide"}
 
     def __init__(self, left: ASTNode | Obj, right: ASTNode | Obj, op: str):
@@ -198,6 +197,18 @@ class Assign(ASTNode):
     def evaluate(self):
         self.val.evaluate()
         self.var.store()
+
+class Return(ASTNode):
+    def __init__(self, ret: Obj):
+        self.ret = ret
+    
+    def __str__(self):
+        return f"return {self.ret}"
+    
+    def evaluate(self):
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\treturn {self.ret}", file=f)
+        f.close()
 
 class Call(ASTNode):
     def __init__(self, var: Obj, method: str):
@@ -372,4 +383,87 @@ class While(ASTNode):
             # print(f"end_loop{loop}:", file=f)
             print(f"endl{loop}:", file=f)
         f.close()
+
+# formal parameters for a method
+class Params(ASTNode):
+    def __init__(self, params: list[(str, Obj)]):
+        self.params = params
+    
+    def add_param(self, new_param):
+        self.params.append(new_param)
+
+    def get_params(self):
+        f = f"{self.params[0][0]}"
+        for p in self.params[1:]:
+            f += f",{p[0]}"
+        return p
+
+    def __str__(self):
+        f = f""
+        for p in self.params:
+            f = f + f"{p[0]: p[1]}\n"
+        return f
+
+class Method(ASTNode):
+    def __init__(self, name: str, args: Params, ret: int, block: Block, classname):
+        self.name = name
+        self.args = args
+        # return type of method
+        self.type = ret
+        # statements
+        self.block = block
+        self.classname = classname
+
+        # TODO: check that return value is actual return value
+    
+    def evaluate(self):
+        with open(Obj.ASM_FILE, "a+") as f:
+            # print(f"loop{loop}:", file=f)
+            print(f".method {self.name}", file=f)
+            print(f"\t.local {self.args.get_params()}", file=f)
+        f.close()
+        self.block.evaluate()
+    
+    def __str__(self):
+        return f"Method: {self.classname}:{self.name}"
+
+class ClassBody(ASTNode):
+    def __init__(self, statements: Block, methods: list[Method]):
+        self.statements = statements
+        self.methods = methods
+
+    def __str__(self):
+        return f"{self.methods}"
+
+    def evaluate(self):
+        self.statements.evaluate()
+        for method in self.methods:
+            with open(Obj.ASM_FILE, "a+") as f:
+                print(f"\n", file=f)
+            f.close()
+            method.evaluate()
+
+class Class(ASTNode):
+    def __init__(self, classname: str, constructor_args: Params = None, class_body: ClassBody = None, parent: int | str = OBJ):
+        self.name = classname
+        self.params = constructor_args
+        self.class_body = class_body
+        self.parent = parent
+
+    def __str__(self):
+        return f"Class: {self.name}"
+    
+    def evaluate(self):
+        # check if it inherits a builtin class or a new class
+        if isinstance(self.parent, int):
+            inherit = node_types[self.parent]
+        else:
+            inherit = self.parent
+
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f".class {self.name}:{inherit}", file=f)
+            print(f".method $constructor", file=f)
+            print(f"\t.local TODO", file=f)
+        f.close()
+        self.class_body.evaluate()
         
