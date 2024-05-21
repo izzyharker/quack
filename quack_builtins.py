@@ -1,7 +1,7 @@
 # define node types for tree
 OBJ, INT, NEGINT, STRING, BOOL, NOTHING = range(6)
 node_types = {OBJ: "Obj", INT: "Int", NEGINT: "Negint", STRING: "String", BOOL: "Bool", NOTHING: "Nothing"}
-var_types = {"Obj": OBJ, "Int": INT, "String": STRING, "Boolean": BOOL}
+var_types = {"Obj": OBJ, "Int": INT, "String": STRING, "Boolean": BOOL, "Nothing": NOTHING}
 keywords = r"class|if|while|and|typecase|def|elif|return|or|not|extends|else|String|Int|Obj|Boolean|true|false|Nothing|none"
 
 class Obj():

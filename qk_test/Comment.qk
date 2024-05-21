@@ -1,0 +1,9 @@
+// x is 1
+x = 1;
+
+x.print(); // print x
+
+/* this comment is ignored! */
+
+y: String /* this should work */ = "hi";
+y.print();

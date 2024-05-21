@@ -210,52 +210,6 @@ class Return(ASTNode):
             print(f"\treturn {self.ret}", file=f)
         f.close()
 
-class Call(ASTNode):
-    def __init__(self, var: Obj, method: str):
-        self.var = None
-        self.type = None
-        if var is not None:
-            self.var = var
-            self.type = var.type
-
-        self.method = method
-
-    def assign_var(self, expr: Obj):
-        self.var = expr
-        self.type = expr.type
-
-    def __str__(self):
-        return f"Call: {self.var}.{self.method}()"
-    
-    def evaluate(self) -> None:
-        """
-        Eventually include type checking in this
-        """
-        calling = ""
-        if self.type == INT:
-            if self.method not in Int.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "Int"
-        elif self.type == OBJ:
-            if self.method not in Obj.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "Obj"
-        elif self.type == BOOL:
-            if self.method not in Bool.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "Bool"
-        elif self.type == STRING:
-            if self.method not in String.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = "String"
-        elif self.type == NOTHING:
-            raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-        
-        with open(Obj.ASM_FILE, "a") as f:
-            self.var.evaluate()
-            print(f"\tcall {calling}:{self.method}", file=f)
-        f.close()
-
 class IfNode(ASTNode):
     def __init__(self, cond: IntComp | BoolComp, block: Block):
         self.statement = block
@@ -378,15 +332,46 @@ class While(ASTNode):
         f.close()
         self.statement.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            # print(f"\tjump {loop}", file=f)
             print(f"\tjump startl{loop}", file=f)
-            # print(f"end_loop{loop}:", file=f)
             print(f"endl{loop}:", file=f)
         f.close()
 
+class Field(ASTNode):
+    # field access of a class instance
+    def __init__(self, var: Obj | ASTNode = None, expr: str = None):
+        self.expr = expr
+        self.var = var
+        self.val = None
+        self.type = OBJ
+
+    def __str__(self):
+        return f"{self.var}.{self.expr}"
+    
+    def evaluate(self):
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\tload $\n\tload $:{self.var}", file=f)
+        f.close()
+
+    def store(self):
+        if self.var.name == "this":
+            this = "$"
+        else:
+            this = self.var
+
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\tload {this}\n\tstore_field {this}:{self.expr}", file=f)
+        f.close()
+
+    def assign(self, val, type):
+        self.val = val
+        self.type = type
+
+    def set_var(self, var):
+        self.var = var
+
 # formal parameters for a method
 class Params(ASTNode):
-    def __init__(self, params: list[(str, Obj)]):
+    def __init__(self, params: list[(str, str | int)] = []):
         self.params = params
     
     def add_param(self, new_param):
@@ -396,25 +381,40 @@ class Params(ASTNode):
         f = f"{self.params[0][0]}"
         for p in self.params[1:]:
             f += f",{p[0]}"
-        return p
+        return f
 
     def __str__(self):
         f = f""
         for p in self.params:
-            f = f + f"{p[0]: p[1]}\n"
-        return f
+            f = f + f"{p[0]}: {p[1]},"
+        return f[0:-1]
 
+# TODO: fix assemble
 class Method(ASTNode):
-    def __init__(self, name: str, args: Params, ret: int, block: Block, classname):
+    def __init__(self, name: str, args: Params, ret: int, block: Block):
         self.name = name
         self.args = args
         # return type of method
         self.type = ret
         # statements
         self.block = block
-        self.classname = classname
 
         # TODO: check that return value is actual return value
+        self.locals: list[Variable] = []
+
+    def add_local(self, var: Variable) -> None:
+        self.locals.append(var)
+
+    def get_locals(self) -> str | None:
+        if len(self.locals) == 1:
+            return None
+        f = f""
+        for l in self.locals:
+            f += f",{l.name}"
+        return f[1:]
+
+    def __str__(self):
+        return f"Method: {self.name}({self.args}) -> {self.type}"
     
     def evaluate(self):
         with open(Obj.ASM_FILE, "a+") as f:
@@ -423,17 +423,17 @@ class Method(ASTNode):
             print(f"\t.local {self.args.get_params()}", file=f)
         f.close()
         self.block.evaluate()
-    
-    def __str__(self):
-        return f"Method: {self.classname}:{self.name}"
 
 class ClassBody(ASTNode):
-    def __init__(self, statements: Block, methods: list[Method]):
+    def __init__(self, statements: Block, methods: list[Method] = []):
         self.statements = statements
         self.methods = methods
 
     def __str__(self):
         return f"{self.methods}"
+    
+    def add_method(self, m: Method):
+        self.methods.append(self)
 
     def evaluate(self):
         self.statements.evaluate()
@@ -444,15 +444,38 @@ class ClassBody(ASTNode):
             method.evaluate()
 
 class Class(ASTNode):
+    # list of user-defined classes
+    # name of class : class
+    classes: dict[str: ASTNode] = {}
+
     def __init__(self, classname: str, constructor_args: Params = None, class_body: ClassBody = None, parent: int | str = OBJ):
         self.name = classname
         self.params = constructor_args
         self.class_body = class_body
         self.parent = parent
+        
+        self.fields = {}
+
+        Class.classes[self.name] = self
 
     def __str__(self):
-        return f"Class: {self.name}"
+        return f"Class: {self.name} ({self.params}) -> {self.parent}"
     
+    def get_methods(self):
+        m = []
+        for method in self.class_body.methods:
+            m.append(method.name)
+        return m
+    
+    def get_params(self):
+        par = []
+        for p in self.params.params:
+            par.append(p[1])
+        return par
+    
+    def add_local(self, var: Variable):
+        self.fields[var.name] = var
+
     def evaluate(self):
         # check if it inherits a builtin class or a new class
         if isinstance(self.parent, int):
@@ -463,7 +486,77 @@ class Class(ASTNode):
         with open(Obj.ASM_FILE, "a+") as f:
             print(f".class {self.name}:{inherit}", file=f)
             print(f".method $constructor", file=f)
-            print(f"\t.local TODO", file=f)
+            # TODO: fields, forward declaration of methods
         f.close()
         self.class_body.evaluate()
         
+class UserClassInstance(ASTNode):
+    def __init__(self, class_type: str, constructor_args: list[Obj]):
+        self.type = class_type
+        self.args = constructor_args
+
+        self.check_args()
+    
+    def check_args(self):
+        c = Class.classes[self.type]
+        for a, c in zip(self.args, c.get_params()):
+            if a.type != c:
+                ASTError(TYPE, f"Arguments to class instance do not match constructor.")
+
+    def __str__(self):
+        return f"Class instance: {self.type}({self.args})"
+    
+    def evaluate(self):
+        for arg in self.args:
+            arg.evaluate()
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"\tnew {self.type}\n\tcall {self.type}:$constructor", file=f)
+        f.close()
+
+# TODO: generalize to all calls
+class Call(ASTNode):
+    def __init__(self, var: Obj, method: str, args: Params):
+        self.var = None
+        self.type = None
+        self.args = args
+        if var is not None:
+            self.var = var
+            self.type = var.type
+
+        self.method = method
+
+    def assign_var(self, expr: Obj):
+        self.var = expr
+        self.type = expr.type
+
+    def __str__(self):
+        return f"Call: {self.var}.{self.method}()"
+    
+    def evaluate(self) -> None:
+        """
+        Eventually include type checking in this
+        """
+        calling = ""
+        if self.type == INT:
+            if self.method not in Int.methods:
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+            calling = "Int"
+        elif self.type == OBJ:
+            if self.method not in Obj.methods:
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+            calling = "Obj"
+        elif self.type == BOOL:
+            if self.method not in Bool.methods:
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+            calling = "Bool"
+        elif self.type == STRING:
+            if self.method not in String.methods:
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+            calling = "String"
+        elif self.type == NOTHING:
+            raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+        
+        with open(Obj.ASM_FILE, "a") as f:
+            self.var.evaluate()
+            print(f"\tcall {calling}:{self.method}", file=f)
+        f.close()

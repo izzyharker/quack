@@ -8,8 +8,9 @@ import AST as ast
 log.basicConfig(level=log.DEBUG)
 
 class ParseTree():
-    NORMAL, CALL, EOF, ERROR = range(4)
+    NORMAL, EOF, CLASS = range(3)
     var_names = []
+    classes = []
     var_types: dict[str: int] = {}
 
     # list of things to evaluate, in order of appearance
@@ -69,7 +70,6 @@ class ParseTree():
                 self.check_comment()
             else:
                 print("Error at:", self.program[self.pc:])
-                self.state = ParseTree.ERROR
                 self.error(f"Expected token {expect} not found in {self.program[self.pc:]}")
         else:
             self.state = ParseTree.EOF
@@ -153,12 +153,7 @@ class ParseTree():
                 match = match.group()
                 self.eat(num_to_jump=len(match))
                 log.debug(f"match={match}")
-                if re.match(r"\(", self.program[self.pc]):
-                    self.state = ParseTree.CALL
-                    return match
-                self.state = ParseTree.NORMAL
                 return match
-            self.state = ParseTree.ERROR
             return None
         else:
             self.error("Variable name cannot be a keyword!")
@@ -166,6 +161,8 @@ class ParseTree():
     def class_ident(self):
         # eventually have this be a list of declared classes
         classes = r"Obj|Int|String|Boolean|Nothing"
+        for c in ParseTree.classes:
+            classes += rf"|{c.name}"
         self.check_space()
         match = re.match(classes, self.program[self.pc:])
         log.debug(f"Current index:{self.program[self.pc:self.pc + 12]}")
@@ -174,12 +171,7 @@ class ParseTree():
             log.debug(f"class: {match}")
             self.eat(num_to_jump=len(match))
             return qk.var_types[match]
-        self.state = ParseTree.ERROR
         self.error(f"TypeError: Undefined class:{self.program[self.pc:]}")
-
-    def Method_Call(self):
-        # skip this for now - this will be obj.function()
-        pass
 
     def rexpr_times(self):
         """T : T * F | T / F | F"""
@@ -212,6 +204,27 @@ class ParseTree():
         else:
             log.debug(f"{node}")
         return node
+    
+    def Class_Instance(self) -> ast.UserClassInstance :
+        classes = r"Obj|Int|String|Boolean|Nothing"
+        for c in ParseTree.classes:
+            classes += rf"|{c}"
+        self.check_space()
+        match = re.match(classes, self.program[self.pc:])
+        log.debug(f"Current index:{self.program[self.pc:self.pc + 12]}")
+        if match is not None:
+            match = match.group()
+            log.debug(f"New class instance: {match}")
+            self.eat(num_to_jump=len(match))
+            self.eat(r"\(")
+            args = [self.literal()]
+            while re.match(r"\)", self.program[self.pc:]) is None:
+                self.eat(r",")
+                args.append(self.literal())
+            self.eat(r"\)")
+            return ast.UserClassInstance(match, args)
+        return None
+
 
     def R_Expr(self):
         """ 
@@ -239,40 +252,50 @@ class ParseTree():
         return node
 
     def R_andor(self):
-        node = self.R_Expr()
+        node = self.Class_Instance()
 
-        match = re.match(r"and|or", self.program[self.pc:])
-        if match is not None:
-            match = match.group()
-            self.eat(match, len(match))
-            log.debug(f"Boolcomp: {node}")
-            node = ast.BoolComp(node, self.R_Expr(), match)
+        if node is None:
+            node = self.R_Expr()
 
-        # print("E: ", node)
+            match = re.match(r"and|or", self.program[self.pc:])
+            if match is not None:
+                match = match.group()
+                self.eat(match, len(match))
+                log.debug(f"Boolcomp: {node}")
+                node = ast.BoolComp(node, self.R_Expr(), match)
+
+            # print("E: ", node)
         return node
 
     # leave user-written method calls to later
-    def L_Expr(self):
+    def L_Expr(self) -> ast.Call | ast.Field | qk.Variable :
         """
         ident | ident.ident
         """
         expr = self.R_andor()
         log.debug(f"expr: {expr}")
         rhs = None
+        # if field access or method call, do something different
         if self.program[self.pc] == ".":
             self.eat(r"\.")
             log.debug(f"at {self.program[self.pc:self.pc + 12]}")
+            # identify
             rhs = self.ident()
-            if self.state == ParseTree.CALL:
+            # this triggers on "("
+            if re.match(r"\(", self.program[self.pc:]):
                 self.eat(r"\(")
+                args = self.Args()
                 self.eat(r"\)")
-                rhs = ast.Call(None, rhs)
+                rhs = ast.Call(None, rhs, args)
                 rhs.assign_var(expr)
                 log.debug(f"Calling {rhs.method} on {expr}")
-                self.state = ParseTree.NORMAL
-                return rhs
-            elif self.state == ParseTree.NORMAL:
-                return qk.Variable.var_names[expr.val]
+                rhs.var = expr.val
+            # otherwise return a field access instance with the value and the rhs
+            else:
+                rhs = ast.Field(None, rhs)
+                rhs.set_var(expr)
+                log.debug(f"Field access: {rhs}")
+            return rhs
 
         return expr
     
@@ -280,7 +303,7 @@ class ParseTree():
         block = []
         if re.match(r"elif", self.program[self.pc:]) is not None:
             self.eat(r"elif", num_to_jump=4)
-            elifcond = self.R_andor()
+            elifcond = self.L_Expr()
             log.debug(f"elif condition located: {elifcond}")
             if re.match(r";", self.program[self.pc]) is not None:
                 # else
@@ -312,7 +335,7 @@ class ParseTree():
             self.eat(r"if", 2)
             if re.match(r"\(.*\)", self.program[self.pc:]):
                 self.eat(r"\(", 1)
-                ifcond = self.R_andor()
+                ifcond = self.L_Expr()
                 log.debug(f"If condition located: {ifcond}")
                 block = []
                 if re.match(r"\)", self.program[self.pc:]):
@@ -337,7 +360,7 @@ class ParseTree():
         return ast.Conditional(ifnode, elifnodes, elsenode)
 
     def While(self) -> ast.While:
-        whilecond = self.R_andor()
+        whilecond = self.L_Expr()
         log.debug(f"While condition located: {whilecond}")
         block = []
         if re.match(r";", self.program[self.pc]) is not None:
@@ -357,49 +380,52 @@ class ParseTree():
             statement
         }
         """
+        if nested is None:
+            block = ParseTree.statements
+        else:
+            block = nested
         self.check_comment()
+        # check if
         if re.match(r"if[\s\(]", self.program[self.pc:]):
             node = self.Conditional()
-            if nested is None:
-                ParseTree.statements.append(node)
-            else:
-                nested.append(node)
+            block.append(node)
             return
+        
+        # check while
         elif re.match(r"while[\s\(]", self.program[self.pc:]):
             self.eat("", num_to_jump=5)
             node = self.While()
-            if nested is None:
-                ParseTree.statements.append(node)
-            else:
-                nested.append(node)
+            block.append(node)
             return
+        
+        # 
         else:    
             log.debug(f"L_Expr or method call: {self.program[self.pc:self.pc + 12]}")
             l_expr = self.L_Expr()
             declared_type = None
             if self.state is not ParseTree.EOF:
+                # check declaring type
                 if self.program[self.pc] == ":":
                     self.eat(r":")
                     declared_type = self.class_ident()
                 
+                # assignment
                 if self.program[self.pc] == "=":
                     self.eat(r"=")
-                    r_expr = self.R_andor()
+                    r_expr = self.L_Expr()
                     self.eat(";")
                     l_expr.assign(r_expr, r_expr.type)
+                    log.debug(f"l_expr: {l_expr}")
                     stmt = ast.Assign(l_expr, r_expr, declared_type)
 
-                    if nested is None:
-                        ParseTree.statements.append(stmt)
-                    else:
-                        nested.append(stmt)
+                    block.append(stmt)
                     log.debug(f"{stmt}")
                     return
                 
-            if nested is None:
-                ParseTree.statements.append(l_expr)
-            else:
-                nested.append(l_expr)
+            # method call/etc.
+            block.append(l_expr)
+
+            # endline
             self.eat(";")
         return
 
@@ -410,20 +436,68 @@ class ParseTree():
                 self.Statement()
         else:
             while self.pc < self.len and re.match(end_char, self.program[self.pc:]) is None:
+                if re.match(r"def", self.program[self.pc:]):
+                    return
                 self.Statement(block)
-            self.eat(end_char, len(end_char))
+            self.eat(end_char)
         return
 
     # for later
     def Args(self):
-        pass
+        args = ast.Params()
+        if re.match(r"\(", self.program[self.pc]) is not None:
+            self.eat(r"\(", 1)
+        while re.match(r"\)", self.program[self.pc]) is None:
+            name = self.ident()
+            self.eat(r":")
+            tpe = self.class_ident()
+            args.add_param((name, tpe))
+            try:
+                self.eat(r",")
+            except:
+                continue
+        return args
 
-    # for later
-    def Class_Signature(self):
-        pass
+    def Method(self):
+        if re.match(r"def", self.program[self.pc:]) is not None:
+            # get name
+            self.eat(r"def", 3)
+            name = self.ident()
+
+            # get args
+            self.eat(r"\(", 1)
+            args = self.Args()
+            self.eat(r"\)", 1)
+
+            # get return type
+            self.eat(r":", 1)
+            ret = self.class_ident()
+            self.eat(r"\{", 1)
+
+            # parse statements
+            block = []
+            self.Statement_Block(end_char = r"\}", block=block)
+            method = ast.Method(name, args, ret, block)
+            log.debug(f"{method}")
+            # return
+            return method
+        else:
+            # this should never never happen
+            self.error(f"Error: attempted method parsing at {self.program[self.pc + 12]}")
+
+    def ClassBody(self):
+        # classbody is a sequence of statements followed by a sequence of method definitions
+        body = ast.ClassBody(self.Statement_Block(end_char=r"\}"))
+        log.debug(f"finished statements, looking for method call at {self.program[self.pc:self.pc + 12]}")
+        while self.pc < self.len and re.match(r"def", self.program[self.pc:]) is not None:
+            log.debug("Found a new method!")
+            body.add_method(self.Method())
+        self.eat(r"\}")
+        return body
 
     # for later
     def Class(self):
+        self.state = ParseTree.CLASS
         match = re.match(r"class", self.program[self.pc:])
         # this is a bit redundant but whatever
         if match is not None:
@@ -433,12 +507,29 @@ class ParseTree():
             self.eat(r"\(", 1)
             args = self.Args()
             self.eat(r"\)", 1)
+        match = re.match(r"extends", self.program[self.pc:])
+        if match is not None:
+            self.eat(r"extends", len("extends"))
+            parent = self.class_ident()
+            log.debug(f"new class {classname} extending {parent}")
+        else:
+            parent = qk.OBJ
+            log.debug(f"no parent given, new class {classname} inheriting Obj")
+        self.eat(r"\{")
+
+        self.state = ParseTree.CLASS
+        new_class = ast.Class(classname, args, self.ClassBody(), parent)
+        log.debug(f"{new_class}")
+        ParseTree.classes.append(new_class.name)
+        return
 
     def evaluate(self):
         # evaluate 0 or more class statements
         while self.pc < self.len and re.match(r"class", self.program[self.pc:]) is not None:
             self.Class()
         
+        log.debug("Finished parsing class definitions - looking for statements...")
+        log.debug(f"Current position: {self.program[self.pc:self.pc + 12]}")
         # followed by a statement block
         self.Statement_Block()
 
