@@ -289,7 +289,7 @@ class ParseTree():
                 rhs = ast.Call(None, rhs, args)
                 rhs.assign_var(expr)
                 log.debug(f"Calling {rhs.method} on {expr}")
-                rhs.var = expr.val
+                return rhs
             # otherwise return a field access instance with the value and the rhs
             else:
                 rhs = ast.Field(None, rhs)
@@ -573,8 +573,7 @@ def main():
     # write header information
     f = open(qk.Obj.ASM_FILE, "a")
     print(f".class {out_file}:Obj", file=f)
-    print(".method $constructor", file=f)
-    print("\t.local ", file=f, end="")
+    print(".method $constructor", file=f, end="")
 
     f.close()
 
@@ -583,12 +582,14 @@ def main():
 
     f = open(qk.Obj.ASM_FILE, "a")
     first = True
-    for name in qk.Variable.var_names:
-            if first:
-                print(f"{name}", file=f, end="")
-                first = False
-            else:
-                print(f",{name}", file=f, end="")
+    if len(qk.Variable.var_names) > 0:
+        print("\n\t.local ", file=f, end="")
+        for name in qk.Variable.var_names:
+                if first:
+                    print(f"{name}", file=f, end="")
+                    first = False
+                else:
+                    print(f",{name}", file=f, end="")
     
     print("\n\tenter", file=f)
     f.close()

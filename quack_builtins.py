@@ -62,7 +62,7 @@ class String(Obj):
 
 class Bool(Obj):
     # list of methods for the Bool class
-    methods: list[str] = []
+    methods: list[str] = ["print", "string", "and", "or"]
 
     def __init__(self, value: str):
         super().__init__(value)

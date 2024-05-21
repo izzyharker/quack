@@ -163,7 +163,7 @@ class BoolComp(ASTNode):
         self.left.evaluate()
         self.right.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print("\tcall Bool:equals", file=f)
+            print(f"\tcall Bool:{self.op}", file=f)
         f.close()
 
 class Not(ASTNode):
@@ -374,8 +374,14 @@ class Params(ASTNode):
     def __init__(self, params: list[(str, str | int)] = []):
         self.params = params
     
-    def add_param(self, new_param):
-        self.params.append(new_param)
+    def add_param(self, new_param: tuple[str, str | int]):
+        """
+        Add a new argument to a method or class signature
+        takes a tuple (name, type), where name the variable name and type is an int for built-in classes or str for user-defined classes
+        """
+        # skip this - reference to inherent class variable
+        if new_param[0] != "this":
+            self.params.append(new_param)
 
     def get_params(self):
         f = f"{self.params[0][0]}"
@@ -389,7 +395,7 @@ class Params(ASTNode):
             f = f + f"{p[0]}: {p[1]},"
         return f[0:-1]
 
-# TODO: fix assemble
+# TODO: fix assembly
 class Method(ASTNode):
     def __init__(self, name: str, args: Params, ret: int, block: Block):
         self.name = name
@@ -420,7 +426,9 @@ class Method(ASTNode):
         with open(Obj.ASM_FILE, "a+") as f:
             # print(f"loop{loop}:", file=f)
             print(f".method {self.name}", file=f)
-            print(f"\t.local {self.args.get_params()}", file=f)
+            args = self.args.get_params()
+            if args != f"":
+                print(f"\t.local {self.args.get_params()}", file=f)
         f.close()
         self.block.evaluate()
 
