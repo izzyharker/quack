@@ -1,0 +1,13 @@
+filename=$(basename -- "$1")
+extension="#{filename##*.}"
+filename="${filename%.*}"
+
+echo "Assembling $filename\n"
+
+# if we successfully assembled, continue
+if python quack.py $1 ; then 
+    echo "Successfully assembled $filename\n";
+    echo "done. " ;
+else
+    echo "Error in quack code ^^^"
+fi
