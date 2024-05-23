@@ -1,0 +1,3 @@
+if (true or false) {
+    "yay!\n".print();
+}

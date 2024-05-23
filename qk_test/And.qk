@@ -1,5 +1,5 @@
-if (true) {
-    true.print();
+if (1 <= 2 and true) {
+    "and works! yay\n".print();
 } else {
     "oh no\n".print();
 }
