@@ -1,0 +1,8 @@
+class Test() {
+    def test(x: Int) : Nothing {
+        x.print();
+    }
+}
+
+t = Test();
+t.test(2);

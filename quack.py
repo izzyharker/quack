@@ -5,13 +5,16 @@ import logging as log
 import quack_builtins as qk
 import AST as ast
 
-log.basicConfig(level=log.DEBUG)
+log.basicConfig(level=log.INFO)
 
 class ParseTree():
-    NORMAL, EOF, CLASS = range(3)
-    var_names = []
+    NORMAL, EOF, CLASS, RETURN = range(4)
     classes = []
     var_types: dict[str: int] = {}
+    current_class = None
+
+    # current live variables
+    live_variables: dict[str: qk.Variable] = {}
 
     # list of things to evaluate, in order of appearance
     statements = []
@@ -69,7 +72,7 @@ class ParseTree():
                 self.check_space()
                 self.check_comment()
             else:
-                print("Error at:", self.program[self.pc:])
+                # log.info(f"Error at: {self.program[self.pc:]}")
                 self.error(f"Expected token {expect} not found in {self.program[self.pc:]}")
         else:
             self.state = ParseTree.EOF
@@ -81,10 +84,10 @@ class ParseTree():
         """
         integer = r"(-?[1-9]\d*)|0"
         # TODO: fix string thing
-        string = r"\".*\""
+        string = r"\"[^\"]*\""
         longstring = f"\"\"\".*\"\"\""
         var_name = r"if"
-        for var in qk.Variable.var_names:
+        for var in ParseTree.live_variables.keys():
             var_name += rf"|{var}"
         boolean = r"true|false"
 
@@ -115,6 +118,7 @@ class ParseTree():
         match = re.match(string, self.program[self.pc:]) 
         if match is not None:
             match = match.group()
+            log.debug(f"Short string literal: {match}")
             self.eat(num_to_jump=len(match))
             return qk.String(match)
         
@@ -133,18 +137,18 @@ class ParseTree():
             if match is not None:
                 match = match.group()
                 log.debug(f"existing variable -{match}-")
-                for var in qk.Variable.expr:
-                    # log.debug(f"checking -{match}- against -{var.name}-")
-                    if var.name == match:
-                        log.debug(f"found var {var}")
-                        self.eat(num_to_jump=len(match))
-                        return var
+                var = ParseTree.live_variables[match]
+                log.debug(f"found var {var}")
+                self.eat(num_to_jump=len(match))
+                return var
             match = re.match(r"[\w\_]+", self.program[self.pc:])
             if match is not None:
                 match = match.group()
                 log.debug(f"new variable -{match}-")
                 self.eat(num_to_jump=len(match))
-                return qk.Variable(match, qk.NOTHING, None)
+                var = qk.Variable(match, qk.NOTHING, None)
+                ParseTree.live_variables[match] = var
+                return var
             # self.error("NameError: Reference to Undefined Variable")
 
         log.debug(f"Unrecognized literal:{self.program[self.pc:self.pc+12]} - returning Nothing()")
@@ -204,6 +208,7 @@ class ParseTree():
 
         match = re.match(r"<=|>=|==|<|>", self.program[self.pc:]) 
         if match is not None:
+            log.debug(f"Comparison: {node}, {match}")
             match = match.group()
 
             self.eat(match, len(match))
@@ -226,12 +231,17 @@ class ParseTree():
             log.debug(f"New class instance: {match}")
             self.eat(num_to_jump=len(match))
             self.eat(r"\(")
-            args = [self.literal()]
+            args = []
             while re.match(r"\)", self.program[self.pc:]) is None:
-                self.eat(r",")
                 args.append(self.literal())
+                try:
+                    self.eat(r",")
+                except:
+                    log.debug("Breaking argument loop on no comma.")
+                    break
             self.eat(r"\)")
-            return ast.UserClassInstance(match, args)
+            inst = ast.UserClassInstance(match, args)
+            return inst
         return None
 
 
@@ -275,6 +285,20 @@ class ParseTree():
 
             # print("E: ", node)
         return node
+    
+    def Call_Args(self):
+        # args = ast.Params()
+        args = []
+        if re.match(r"\(", self.program[self.pc]) is not None:
+            self.eat(r"\(", 1)
+        while re.match(r"\)", self.program[self.pc]) is None:
+            args.append(self.literal())
+            try:
+                self.eat(r",")
+            except:
+                log.debug(r"Expected comma not found - careful!")
+                break
+        return args
 
     # leave user-written method calls to later
     def L_Expr(self) -> ast.Call | ast.Field | qk.Variable :
@@ -293,7 +317,7 @@ class ParseTree():
             # this triggers on "("
             if re.match(r"\(", self.program[self.pc:]):
                 self.eat(r"\(")
-                args = self.Args()
+                args = self.Call_Args()
                 self.eat(r"\)")
                 rhs = ast.Call(None, rhs, args)
                 rhs.assign_var(expr)
@@ -304,6 +328,7 @@ class ParseTree():
                 rhs = ast.Field(None, rhs)
                 rhs.set_var(expr)
                 log.debug(f"Field access: {rhs}")
+                ParseTree.current_class.add_field(rhs.expr, rhs.var.type)
             return rhs
 
         return expr
@@ -345,7 +370,7 @@ class ParseTree():
             if re.match(r"\(.*\)", self.program[self.pc:]):
                 self.eat(r"\(", 1)
                 ifcond = self.L_Expr()
-                log.debug(f"If condition located: {ifcond}")
+                log.debug(f"If condition located: {ifcond}, {ifcond.type}")
                 block = []
                 if re.match(r"\)", self.program[self.pc:]):
                     self.eat(r"\)", 1)
@@ -380,6 +405,14 @@ class ParseTree():
             self.Statement_Block(end_char = r"\}", block=block)
         whilenode = ast.While(whilecond, ast.Block(block))
         return whilenode
+    
+    def Return(self):
+        match = re.match(r"return[\s]", self.program[self.pc:])
+        if match is not None:
+            match = match.group()
+            self.eat(num_to_jump=len(match))
+            expr = self.L_Expr()
+            return ast.Return(expr)
 
     def Statement(self, nested: list = None):
         """
@@ -394,10 +427,19 @@ class ParseTree():
         else:
             block = nested
         self.check_comment()
+
+        # check return
+        if re.match(r"return\s", self.program[self.pc:]):
+            node = self.Return()
+            block.append(node)
+            self.state = ParseTree.RETURN
+            log.info(f"{node}")
+            return
         # check if
         if re.match(r"if[\s\(]", self.program[self.pc:]):
             node = self.Conditional()
             block.append(node)
+            log.info(f"{node}")
             return
         
         # check while
@@ -405,6 +447,7 @@ class ParseTree():
             self.eat("", num_to_jump=5)
             node = self.While()
             block.append(node)
+            log.info(f"{node}")
             return
         
         # 
@@ -429,6 +472,7 @@ class ParseTree():
 
                     block.append(stmt)
                     log.debug(f"{stmt}")
+                    log.info(f"{stmt}")
                     return
                 
             # method call/etc.
@@ -436,47 +480,65 @@ class ParseTree():
 
             # endline
             self.eat(";")
+        log.info(f"{l_expr}")
         return
 
 
     def Statement_Block(self, end_char = None, block = None):
+        log.info(f"Statement Block:\n-----------------")
         if end_char is None:
-            while self.pc < self.len:
+            while self.pc < self.len and self.state != ParseTree.RETURN:
+                # on return, stop parsing
                 self.Statement()
         else:
             while self.pc < self.len and re.match(end_char, self.program[self.pc:]) is None:
                 if re.match(r"def", self.program[self.pc:]):
+                    log.info("------------------")
                     return
                 self.Statement(block)
             self.eat(end_char)
+        log.info("------------------")
         return
 
     # for later
     def Args(self):
-        args = ast.Params()
+        # args = ast.Params()
+        args = []
         if re.match(r"\(", self.program[self.pc]) is not None:
             self.eat(r"\(", 1)
         while re.match(r"\)", self.program[self.pc]) is None:
             name = self.ident()
             self.eat(r":")
             tpe = self.class_ident()
-            args.add_param((name, tpe))
+            args.append((name, tpe))
             try:
                 self.eat(r",")
             except:
                 continue
+        if ParseTree.current_class is not None:
+            log.debug(f"Class Args: {ParseTree.current_class.params}")
+            log.debug(f"Local args: {args}")
+            log.debug(f"{args is ParseTree.current_class.params}")
         return args
 
     def Method(self):
+        locals = {}
+        ParseTree.live_variables = {}
         if re.match(r"def", self.program[self.pc:]) is not None:
             # get name
             self.eat(r"def", 3)
             name = self.ident()
 
+            # args on constructor is ok here
             # get args
             self.eat(r"\(", 1)
-            args = self.Args()
+            new_args = self.Args()
             self.eat(r"\)", 1)
+
+            log.info(f"Args to {name}: ({new_args})")
+
+            for new_var in new_args:
+                ParseTree.live_variables[new_var[0]] = qk.Variable(new_var[0], new_var[1], None)
 
             # get return type
             self.eat(r":", 1)
@@ -486,8 +548,12 @@ class ParseTree():
             # parse statements
             block = []
             self.Statement_Block(end_char = r"\}", block=block)
-            method = ast.Method(name, args, ret, block)
-            log.debug(f"{method}")
+            if self.state != ParseTree.RETURN:
+                block.append(ast.Return(None))
+            method = ast.Method(name, new_args, ret, ast.Block(block))
+
+            method.locals = ParseTree.live_variables
+            log.info(f"Parsed {method}")
             # return
             return method
         else:
@@ -496,12 +562,18 @@ class ParseTree():
 
     def ClassBody(self):
         # classbody is a sequence of statements followed by a sequence of method definitions
-        body = ast.ClassBody(self.Statement_Block(end_char=r"\}"))
-        log.debug(f"finished statements, looking for method call at {self.program[self.pc:self.pc + 12]}")
+        block = []
+        self.Statement_Block(end_char=r"\}", block=block)
+        body = ast.ClassBody(ast.Block(block))
+
+        log.debug(f"Statement block: {body.statements}")
+        log.info(f"finished statements, looking for method call at {self.program[self.pc:self.pc + 12]}")
+
         while self.pc < self.len and re.match(r"def", self.program[self.pc:]) is not None:
             log.debug("Found a new method!")
             body.add_method(self.Method())
         self.eat(r"\}")
+        log.info(f"ClassBody: {body}")
         return body
 
     # for later
@@ -527,8 +599,12 @@ class ParseTree():
         self.eat(r"\{")
 
         self.state = ParseTree.CLASS
-        new_class = ast.Class(classname, args, self.ClassBody(), parent)
+        new_class = ast.Class(classname, args, None, parent)
+        log.info(f"Parsing {new_class}\n--------------")
+        ParseTree.current_class = new_class
+        new_class.set_body(self.ClassBody())
         log.debug(f"{new_class}")
+        log.info(f"Successfully parsed {new_class}\n-------------------")
         ParseTree.classes.append(new_class.name)
         return
 
@@ -539,7 +615,10 @@ class ParseTree():
         
         log.debug("Finished parsing class definitions - looking for statements...")
         log.debug(f"Current position: {self.program[self.pc:self.pc + 12]}")
+        self.state = ParseTree.NORMAL
         # followed by a statement block
+        # check that global statement block is still empty
+        assert(ParseTree.statements == [])
         self.Statement_Block()
 
 def main():
@@ -579,25 +658,25 @@ def main():
     except FileExistsError:
         os.remove(qk.Obj.ASM_FILE)
 
-    # write header information
-    f = open(qk.Obj.ASM_FILE, "a")
-    print(f".class {out_file}:Obj", file=f)
-    print(".method $constructor", file=f, end="")
-
-    f.close()
-
     tree = ParseTree(program)
     tree.evaluate()
 
+    for c in ParseTree.classes:
+        ast.Class.classes[c].evaluate()
+
     f = open(qk.Obj.ASM_FILE, "a")
+    # write header information
+    print(f"\n.class {out_file}:Obj", file=f)
+    print(".method $constructor", file=f, end="")
+
     first = True
     if len(qk.Variable.var_names) > 0:
         print("\n\t.local ", file=f, end="")
         for name in qk.Variable.var_names:
-                if first:
+                if first and name != "this":
                     print(f"{name}", file=f, end="")
                     first = False
-                else:
+                elif name != "this":
                     print(f",{name}", file=f, end="")
     
     print("\n\tenter", file=f)

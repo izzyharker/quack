@@ -1,0 +1,11 @@
+class Pt(x: Int) {
+    this.x = x;
+
+    def test() : Nothing {
+        "test\n".print();
+    }
+}
+
+x = Pt(1);
+
+x.test();
