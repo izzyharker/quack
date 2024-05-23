@@ -62,7 +62,10 @@ class Block(ASTNode):
 
     def evaluate(self):
         for s in self.statements:
-            s.evaluate()
+            ret = s.evaluate()
+
+        # this should always return the value of the return statement
+        return ret
 
 class Expression(ASTNode):
     # expression node
@@ -265,6 +268,7 @@ class Return(ASTNode):
             with open(Obj.ASM_FILE, "a+") as f:
                 print(f"\treturn 0", file=f)
             f.close()
+        return self.ret.type
 
 class IfNode(ASTNode):
     def __init__(self, cond: IntComp | BoolComp, block: Block):
@@ -463,7 +467,6 @@ class Params(ASTNode):
             f = f + f"{p[0]}: {p[1]},"
         return f[0:-1]
 
-# TODO: fix assembly
 class Method(ASTNode):
     def __init__(self, name: str, args: Params | list, ret: int | str, block: Block):
         self.name = name
@@ -482,15 +485,23 @@ class Method(ASTNode):
         # TODO: check that return value is actual return value
         self.locals: dict[str: str | int] = {}
 
+        self.builtin = False
+
+        if self.name in ["PRINT", "EQUALS", "STRING", "LESS", "PLUS", "MINUS", "DIVIDE", "MULTIPLY"]:
+            self.name = self.name.lower()
+            self.builtin = True
+
+
     def add_local(self, var: Variable) -> None:
-        self.locals.append(var)
+        self.locals[var.name] = var
 
     def get_locals(self) -> str | None:
-        if len(self.locals) == 1:
+        if len(self.locals.keys()) == 1:
             return None
         f = f""
-        for l in self.locals:
-            f += f",{l.name}"
+        for l in self.locals.keys():
+            if l != "this":
+                f += f",{l.name}"
         return f[1:]
 
     def __str__(self):
@@ -500,11 +511,14 @@ class Method(ASTNode):
         with open(Obj.ASM_FILE, "a+") as f:
             # print(f"loop{loop}:", file=f)
             print(f"\n.method {self.name}", file=f)
-            args = self.args.get_params()
+            args = self.args.get_param_names()
             if args != f"":
                 print(f"\t.local {self.args.get_param_names()}", file=f)
         f.close()
-        self.block.evaluate()
+        ret = self.block.evaluate()
+        if ret != self.type:
+            ASTError(TYPE, f"Return value of {ret} does not matched declared return value {self.type}")
+            
 
 
 
@@ -514,7 +528,10 @@ class ClassBody(ASTNode):
         self.methods = methods
 
     def __str__(self):
-        return f"Init: {self.statements}\n\tMethods: {self.methods}"
+        f = f"Init: {self.statements}\nMethods: _"
+        for m in self.methods:
+            f += f", {m}"
+        return f
     
     def add_method(self, m: Method):
         self.methods.append(m)

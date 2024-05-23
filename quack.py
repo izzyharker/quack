@@ -535,8 +535,6 @@ class ParseTree():
             new_args = self.Args()
             self.eat(r"\)", 1)
 
-            log.info(f"Args to {name}: ({new_args})")
-
             for new_var in new_args:
                 ParseTree.live_variables[new_var[0]] = qk.Variable(new_var[0], new_var[1], None)
 
