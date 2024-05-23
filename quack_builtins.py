@@ -8,7 +8,7 @@ class Obj():
     ASM_FILE = "out.asm"
 
     # list of methods for the Obj class
-    methods: list[str] = []
+    methods: list[str] = ["string", "print", "equals"]
 
     def __init__(self, value: None):
         self.val = value
@@ -28,7 +28,7 @@ class Obj():
 
 class Int(Obj):
     # list of methods for the Int class
-    methods: list[str] = ["print", "plus", "minus", "times", "divide"]
+    methods: list[str] = ["string", "print", "equals", "plus", "minus", "times", "divide", "less"]
 
     def __init__(self, value: int):
         super().__init__(value)

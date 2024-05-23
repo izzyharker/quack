@@ -46,7 +46,7 @@ class ASTNode():
         return ret
     
     def gen_boolcomp_label():
-        ret = f"{ASTNode.boolcomp_label}"
+        ret = f"cont{ASTNode.boolcomp_label}"
         ASTNode.boolcomp_label += 1
         return ret
 
@@ -102,46 +102,6 @@ class Expression(ASTNode):
     def __str__(self):
         return f"Expression: ({self.left} {self.token} {self.right})"
 
-# TODO: fix assemble for intcomp and and/or - logic isn't quite right but will come back to it
-class IntComp(ASTNode):
-    def __init__(self, left: Expression | Int, right: Expression | Int, op: str):
-        self.left = left
-        self.right = right
-        self.type = BOOL
-
-        if left.type != right.type or left.type != INT:
-            ASTError(TYPE, "Comparison can only be executed for Int/Int.")
-
-        if op in [">", "<", "==", "<=", ">="]:
-            self.op = op
-        else:
-            raise SyntaxError(f"op {op} does not exist in Quack!")
-        
-    def __str__(self):
-        return f"IntComp: {self.left} {self.op} {self.right}"
-    
-    def get_first_function(self):
-        if self.op in ["<", ">"]:
-            return "less"
-        elif self.op == "==":
-            return "equals"
-        else:
-            return None
-    
-    def evaluate(self):
-        if self.op == "<":
-            self.right.evaluate()
-            self.left.evaluate()
-        else:
-            self.left.evaluate()
-            self.right.evaluate()
-
-        func = self.get_first_function()
-        if func is not None:
-            with open(Obj.ASM_FILE, "a+") as f:
-                print(f"\tcall Int:{func}", file=f)
-            f.close()
-
 class BoolComp(ASTNode):
     def __init__(self, left: Expression | Int, right: Expression | Int, op: str):
         self.left = left
@@ -159,12 +119,103 @@ class BoolComp(ASTNode):
     def __str__(self):
         return f"BoolComp: {self.left} {self.op} {self.right}"
     
-    def evaluate(self):
+    def eval_or(self) -> None:
+        # generate label
+        label = ASTNode.gen_boolcomp_label()
+
+        # short circuit on first
         self.left.evaluate()
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\tjump_if short{label}", file=f)
+        f.close()
+        # check second
         self.right.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print(f"\tcall Bool:{self.op}", file=f)
+            print(f"\tjump {label}", file=f)
+            print(f"short{label}:", file=f)
+            print(f"\tconst true", file=f)
+            print(f"\tjump {label}", file=f)
+            print(f"{label}:", file=f)
         f.close()
+        # continue
+    
+    def eval_and(self):
+        # generate label
+        label = ASTNode.gen_boolcomp_label()
+
+        # short circuit on first
+        self.left.evaluate()
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\tjump_ifnot short{label}", file=f)
+        f.close()
+        # check second
+        self.right.evaluate()
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\tjump {label}", file=f)
+            print(f"short{label}:", file=f)
+            print(f"\tconst false", file=f)
+            print(f"\tjump {label}", file=f)
+            print(f"{label}:", file=f)
+        f.close()
+        # continue
+
+    def evaluate(self):
+        if self.op == "or":
+            self.eval_or()
+        elif self.op == "and":
+            self.eval_and()
+
+# TODO: fix assemble for intcomp and and/or - logic isn't quite right but will come back to it
+class IntComp(ASTNode):
+    def __init__(self, left: Expression | Int, right: Expression | Int, op: str):
+        self.left = left
+        self.right = right
+        self.type = BOOL
+
+        # make this a string with the name
+        if isinstance(left.type, int):
+            self.eval_type = node_types[left.type]
+        else:
+            self.eval_type = left.type
+
+        if left.type != right.type:
+            ASTError(TYPE, "Comparison can only be executed for same types.")
+
+        if op in [">", "<", "==", "<=", ">="]:
+            self.op = op
+        else:
+            raise SyntaxError(f"op {op} does not exist in Quack!")
+        
+    def __str__(self):
+        return f"IntComp: {self.left} {self.op} {self.right}, type = {self.eval_type}"
+    
+    def evaluate(self):
+        if self.op[0] == "<":
+            self.right.evaluate()
+            self.left.evaluate()
+        else:
+            self.left.evaluate()
+            self.right.evaluate()
+
+        # this is <, > - only need to check one thing
+        if len(self.op) == 1:
+            with open(Obj.ASM_FILE, "a+") as f:
+                print(f"\tcall {self.eval_type}:less", file=f)
+            f.close()
+
+        # if len = 2, either ==, which is one call..
+        elif self.op == "==":
+            with open(Obj.ASM_FILE, "a+") as f:
+                print(f"\tcall {self.eval_type}:equals", file=f)
+            f.close()
+
+        # .. or <=, >=, which are combined into "less than or equals" with a boolean or
+        elif len(self.op) == 2:
+            op = BoolComp(IntComp(self.left, self.right, self.op[0]), IntComp(self.left, self.right, "=="), "or")
+            op.evaluate()
+
+        else:
+            ASTError(SYNTAX, f"Error in parsing integer comparison operation. ")
 
 class Not(ASTNode):
     def __init__(self, expr: IntComp | Bool):
@@ -176,7 +227,7 @@ class Not(ASTNode):
             ASTNode.error(TYPE, "Not can only be applied to boolean expressions.")
 
     def __str__(self):
-        return f"{self.expr}"
+        return f"Not: {self.expr}"
 
     def evaluate(self):
         # reverse control flow
@@ -203,7 +254,7 @@ class Return(ASTNode):
         self.ret = ret
     
     def __str__(self):
-        return f"return {self.ret}"
+        return f"Return: {self.ret}"
     
     def evaluate(self):
         with open(Obj.ASM_FILE, "a+") as f:
@@ -216,7 +267,7 @@ class IfNode(ASTNode):
         self.cond = cond
 
         if cond.type != BOOL:
-            ASTError(TYPE, "Conditional statement must be a bool!")
+            ASTError(TYPE, f"Conditional statement <{self.cond}, {type(self.cond)}> must be a bool!")
 
     def __str__(self):
         return f"If: {self.cond}"

@@ -80,7 +80,9 @@ class ParseTree():
         integer, var_name, string, bool
         """
         integer = r"(-?[1-9]\d*)|0"
+        # TODO: fix string thing
         string = r"\".*\""
+        longstring = f"\"\"\".*\"\"\""
         var_name = r"if"
         for var in qk.Variable.var_names:
             var_name += rf"|{var}"
@@ -102,6 +104,13 @@ class ParseTree():
             match = match.group()
             self.eat(boolean, len(match))
             return qk.Bool(match)
+        
+        match = re.match(longstring, self.program[self.pc:]) 
+        if match is not None:
+            match = match.group()
+            log.debug(f"Long string: {match}")
+            self.eat(num_to_jump=len(match))
+            return qk.String(match)
         
         match = re.match(string, self.program[self.pc:]) 
         if match is not None:
@@ -193,7 +202,7 @@ class ParseTree():
     def R_intcomp(self):
         node = self.rexpr_times()
 
-        match = re.match(r"<|>|==|<=|>=", self.program[self.pc]) 
+        match = re.match(r"<=|>=|==|<|>", self.program[self.pc:]) 
         if match is not None:
             match = match.group()
 
