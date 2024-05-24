@@ -708,7 +708,7 @@ def main():
 
     first = True
     if len(qk.Variable.var_names) > 0:
-        print("\n\t.local ", file=f, end="")
+        print("\n.local ", file=f, end="")
         for name in qk.Variable.var_names:
                 if first and name != "this":
                     print(f"{name}", file=f, end="")
@@ -719,8 +719,8 @@ def main():
     print("\n\tenter", file=f)
     f.close()
 
-    for expr in ParseTree.statements:
-        expr.evaluate()
+    b = ast.Block(ParseTree.statements)
+    b.evaluate()
 
     f = open(qk.Obj.ASM_FILE, "a")
     print("\treturn 0", file=f)

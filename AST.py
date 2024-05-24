@@ -64,28 +64,41 @@ class ASTNode():
 
 class Block(ASTNode):
     def __init__(self, statements: list[ASTNode | Obj]):
+        # a block is just a list of statements
+        # but this way allows the evaluate method to be implemented
+        # which is useful
         self.statements = statements
     
     def __str__(self):
+        # i am lazy
         retstr = f"Block: _"
         for s in self.statements:
             retstr += f", {s}"
         return retstr
 
     def evaluate(self):
+        # evaluate the list of statements
+        ret = 1
         for s in self.statements:
             ret = s.evaluate()
-
+            # if just calling and not returning anything, pop the result off the stack
+            if isinstance(s, Call):
+                with open(Obj.ASM_FILE, "a+") as f:
+                    print("\tpop", file=f)
+                f.close()
         # this should always return the value of the return statement
         return ret
 
 class Expression(ASTNode):
     # expression node
+    # operator maps to functions
     ops = {"+": "plus", "-": "minus", "*": "multiply", "/": "divide"}
 
     def __init__(self, left: ASTNode | Obj, right: ASTNode | Obj, op: str):
         self.left = left
         self.right = right
+        # this is old but it works
+        # give objects type prio over other nodes
         if isinstance(left, Obj):
             self.type = left.type
         elif isinstance(right, Obj):
@@ -93,12 +106,14 @@ class Expression(ASTNode):
         else:
             self.type = left.type
 
+        # operands can be any type but have to be the same
         if left.type != right.type:
             ASTError(TYPE, f"Operands must have same type, not {node_types[left.type]} and {node_types[right.type]}.")
         
         if op in "+-*/":
             self.token = op
             self.op = Expression.ops[op]
+        # this shouldn't ever happen
         else:
             raise SyntaxError(f"op {op} does not exist in Quack!")
 
@@ -106,9 +121,23 @@ class Expression(ASTNode):
         self.left.evaluate()
         self.right.evaluate()
 
+        # check that the operator is defined for the class
+        # for built-ins, only Int is ok
+        if isinstance(self.type, int):
+            if self.type != INT:
+                ASTError(TYPE, f"Op {self.op} undefined for class {node_types[self.type]}")
+            t = node_types[self.type]
+        else:
+            if self.type not in Class.classes[self.type].get_methods():
+                ASTError(TYPE, f"Op {self.op} undefined for class {self.type}")
+            t = self.type
+
+        # it would be better to have this as a call node but it works now 
+        # and also is not my priority. so.
+
         # print to file
         with open(Obj.ASM_FILE, "a") as f:
-            print(f"\tcall {node_types[self.type]}:{self.op}", file=f)
+            print(f"\tcall {t}:{self.op}", file=f)
         f.close()
 
     def __str__(self):
@@ -116,10 +145,13 @@ class Expression(ASTNode):
 
 class BoolComp(ASTNode):
     def __init__(self, left: Expression | Int, right: Expression | Int, op: str):
+        # and/or
+
         self.left = left
         self.right = right
         self.type = BOOL
 
+        # check that both arguments are bools
         if right.type != BOOL or left.type != BOOL:
             ASTError(TYPE, f"And/Or Comparison can only be executed for Boolean values, not {node_types[self.left.type]}, {node_types[self.right.type]}.")
 
@@ -172,6 +204,7 @@ class BoolComp(ASTNode):
         # continue
 
     def evaluate(self):
+        # this actually has nothing to do with 
         if self.op == "or":
             self.eval_or()
         elif self.op == "and":
@@ -198,7 +231,7 @@ class IntComp(ASTNode):
             raise SyntaxError(f"op {op} does not exist in Quack!")
         
     def __str__(self):
-        return f"IntComp: {self.left} _{self.op}_ {self.right}, type = {self.eval_type}"
+        return f"IntComp: {self.left} _{self.op}_ {self.right}, eval_type = {self.eval_type}"
     
     def evaluate(self):
         if self.op[0] == "<":
@@ -279,13 +312,11 @@ class Return(ASTNode):
     def evaluate(self):
         if self.ret is not None:
             self.ret.evaluate()
-            with open(Obj.ASM_FILE, "a+") as f:
-                print(f"\treturn ", file=f, end="")
-            f.close()
-        else:
-            with open(Obj.ASM_FILE, "a+") as f:
-                print(f"\treturn ", file=f, end="")
-            f.close()
+        with open(Obj.ASM_FILE, "a+") as f:
+            print(f"\treturn ", file=f, end="")
+        f.close()
+        if self.ret is None:
+            return
         return self.ret.type
 
 class IfNode(ASTNode):
@@ -508,12 +539,12 @@ class Method(ASTNode):
         self.locals[var.name] = var
 
     def get_locals(self) -> str | None:
-        if len(self.locals.keys()) == 1:
+        if len(self.locals.keys()) <= 1:
             return None
         f = f""
         for l in self.locals.keys():
             if l != "this":
-                f += f",{l.name}"
+                f += f",{l}"
         return f[1:]
 
     def __str__(self):
@@ -525,7 +556,11 @@ class Method(ASTNode):
             print(f"\n.method {self.name}", file=f)
             args = self.args.get_param_names()
             if args != f"":
-                print(f"\t.local {args}", file=f)
+                print(f".args {args}", file=f)
+            # k = list(self.locals.keys())
+            # if k is not None:
+            #     print(f".local {self.get_locals()}", file=f)
+            print("\tenter", file=f)
         f.close()
         ret = self.block.evaluate()
         with open(Obj.ASM_FILE, "+a") as f:
@@ -551,10 +586,10 @@ class ClassBody(ASTNode):
     def get_methods(self):
         return {m.name: m for m in self.methods}
 
-    def evaluate(self):
+    def evaluate(self, l):
         self.statements.evaluate()
         with open(Obj.ASM_FILE, "a+") as f:
-            print(f"\treturn 0", file=f)
+            print(f"\tload $\n\treturn {l}", file=f)
         f.close()
         for method in self.methods:
             method.evaluate()
@@ -624,10 +659,9 @@ class Class(ASTNode):
                 print("\tenter", file=f)
             # TODO: forward declaration of methods
         f.close()
-        self.class_body.evaluate()
-        with open(Obj.ASM_FILE, "a+") as f:
-            print("\n", file=f, end="")
-        f.close()
+
+        # shoudn't have a return?
+        self.class_body.evaluate(len(self.get_params()))
         
         
 class UserClassInstance(ASTNode):
