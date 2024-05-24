@@ -1,0 +1,8 @@
+class Test(x: Int) extends Int {
+    this.x = x;
+
+    def test() : String {
+        // this should error on return method because they don't match
+        return this.x;
+    }
+}

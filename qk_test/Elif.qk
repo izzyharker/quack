@@ -1,0 +1,7 @@
+if (2 > 2) {
+    "bad new: 2 greater than 2\n".print();
+} elif (2 == 2) {
+    "yay! 2 == 2\n".print();
+} else {
+    0;
+}

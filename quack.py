@@ -325,8 +325,11 @@ class ParseTree():
                 return rhs
             # otherwise return a field access instance with the value and the rhs
             else:
-                rhs = ast.Field(expr, rhs)
-            return rhs
+                f = ast.Field(expr, rhs)
+                if ParseTree.live_variables is not None and expr.name == "this":
+                    log.info(f"Field access: {rhs}. Checking against live variables {ParseTree.live_variables}")
+                    f.type = ParseTree.live_variables[rhs].type
+                return f
 
         return expr
     
@@ -687,6 +690,15 @@ def main():
             else:
                 program += line
 
+    tree = ParseTree(program)
+    tree.evaluate()
+
+    for c in ParseTree.classes:
+        ast.Class.classes[c].evaluate()
+
+    if ParseTree.classes != []:
+        out_file = "$Main"
+
     qk.Obj.ASM_FILE = f"{out_file}.asm"
 
     try:
@@ -694,13 +706,6 @@ def main():
     except FileExistsError:
         os.remove(qk.Obj.ASM_FILE)
 
-    tree = ParseTree(program)
-    tree.evaluate()
-
-    for c in ParseTree.classes:
-        ast.Class.classes[c].evaluate()
-
-    qk.Obj.ASM_FILE = f"{out_file}.asm"
     f = open(qk.Obj.ASM_FILE, "w+")
     # write header information
     print(f".class {out_file}:Obj", file=f)

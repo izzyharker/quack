@@ -1,0 +1,4 @@
+// this should throw error because 1 isn't bool
+if (1 or false) {
+    "oh no\n".print();
+}

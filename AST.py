@@ -82,10 +82,10 @@ class Block(ASTNode):
         for s in self.statements:
             ret = s.evaluate()
             # if just calling and not returning anything, pop the result off the stack
-            if isinstance(s, Call):
-                with open(Obj.ASM_FILE, "a+") as f:
-                    print("\tpop", file=f)
-                f.close()
+            # if isinstance(s, Call):
+            #     with open(Obj.ASM_FILE, "a+") as f:
+            #         print("\tpop", file=f)
+            #     f.close()
         # this should always return the value of the return statement
         return ret
 
@@ -404,7 +404,7 @@ class Conditional(ASTNode):
 
         for label, elf in zip(eliflabels, self.elifnode):
             with open(Obj.ASM_FILE, "a+") as f:
-                print(f"if_clause{label}:", file=f)
+                print(f"elif_clause{label}:", file=f)
             f.close()
             elf.statement.evaluate()
             with open(Obj.ASM_FILE, "a+") as f:
@@ -447,7 +447,7 @@ class While(ASTNode):
 
 class Field(ASTNode):
     # field access of a class instance
-    def __init__(self, belongs: Obj | ASTNode = None, field: str = None):
+    def __init__(self, belongs: Obj | ASTNode = None, field: str | Variable = None):
         # expression/assignemnt
         self.field = field
         # name of variable
@@ -455,6 +455,9 @@ class Field(ASTNode):
         self.val = None
 
         self.type = OBJ
+
+        if isinstance(field, Variable):
+            self.type = field.type
 
     def __str__(self):
         return f"Field: {self.belongs}.{self.field}, <{self.type}>"
@@ -565,8 +568,15 @@ class Method(ASTNode):
         ret = self.block.evaluate()
         with open(Obj.ASM_FILE, "+a") as f:
             print(f"{len(self.args.get_params())}", file=f)
-        # if ret != self.type:
-            # ASTError(TYPE, f"Return value of {ret} does not matched declared return value {self.type}")
+        if ret is None and self.type == NOTHING:
+            return
+        if ret != self.type:
+            t = self.type
+            if isinstance(self.type, int):
+                t = node_types[self.type]
+            if isinstance(ret, int):
+                ret = node_types[ret]
+            ASTError(TYPE, f"Return value of {ret} does not matched declared return value {t}")
 
 
 class ClassBody(ASTNode):
@@ -773,6 +783,20 @@ class Call(ASTNode):
 
         if self.type is not None:
             self.check_method()
+
+        self.check_args()
+
+    def check_args(self):
+        # builtins which take no arguments
+        if self.method in ["print", "string"]:
+            if self.args is not None and len(self.args) != 0:
+                ASTError(SYNTAX, f"Method {self.method} takes 0 arguments, {len(self.args.get_params())} given.")
+        elif self.method in ["equals", "less", "add", "minus", "times", "divide"]:
+            p = self.args
+            if self.args is None or len(p) > 1 or len(p) == 0:
+                ASTError(SYNTAX, f"Method {self.method} takes 1 arguments, {len(self.args.get_params())} given.")
+            elif p[0].type != self.type:
+                ASTError(TYPE, f"Argument type {p[0].type} must match calling type {self.type} for method {self.method}.")
 
     def check_method(self):
         if isinstance(self.type, str):

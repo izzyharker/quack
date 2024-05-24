@@ -1,1 +1,1 @@
-x = 1 # this comment is bad ;
+x = 1 # this comment is bad in position and it should be // ;
