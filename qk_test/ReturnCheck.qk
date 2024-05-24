@@ -1,0 +1,11 @@
+class Test(x: Int) {
+    this.x = x;
+
+    def test() : Int {
+        return this.x;
+    }
+}
+
+t = Test(1);
+x = t.test();
+x.print();
