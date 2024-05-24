@@ -258,7 +258,9 @@ class Assign(ASTNode):
         else:
             self.type = self.var.type
         
-
+    def set_type(self, t):
+        self.type = t
+        self.var.type = t
 
     def __str__(self):
         return f"Assign: {self.var}, {self.val} <{self.type}>"
@@ -547,7 +549,7 @@ class ClassBody(ASTNode):
         self.methods.append(m)
 
     def get_methods(self):
-        return self.methods
+        return {m.name: m for m in self.methods}
 
     def evaluate(self):
         self.statements.evaluate()
@@ -623,6 +625,9 @@ class Class(ASTNode):
             # TODO: forward declaration of methods
         f.close()
         self.class_body.evaluate()
+        with open(Obj.ASM_FILE, "a+") as f:
+            print("\n", file=f, end="")
+        f.close()
         
         
 class UserClassInstance(ASTNode):
@@ -736,15 +741,31 @@ class Call(ASTNode):
             self.check_method()
 
     def check_method(self):
-        if isinstance(self.ret_type, str):
-            ms = Class.classes[self.ret_type].get_methods()
-            for m in ms:
-                if m.name == self.method:
-                    self.ret_type = m.type
+        if isinstance(self.type, str):
+            ms = Class.classes[self.type].get_methods()
+            try:
+                self.ret_type = ms[self.method].type
+            except:
+                # ASTError(SYNTAX, f"Method {self.method} does not exist for type {self.type}")
+                self.type = Class.classes[self.type].parent
+                self.check_method()
+                return
+        else:
+            if self.type == INT:
+                if self.method in ["less", "equals"]:
+                    self.ret_type = BOOL
+                elif self.method in ["plus", "minus", "times", "divide"]:
+                    self.ret_type = INT
+            else:
+                if self.method in ["equals"]:
+                    self.ret_type = BOOL
+                elif self.method in ["string"]:
+                    self.ret_type = STRING
+        return 
 
     def assign_var(self, expr: Obj | ASTNode):
         self.var = expr
-        self.ret_type = expr.type
+        self.type = expr.type
         self.check_method()
 
     def __str__(self):
@@ -756,14 +777,14 @@ class Call(ASTNode):
         """
         calling = ""
 
-        # for built-ins - make lower in assembly
+        # for built-in funcs - make lower in assembly
         if isinstance(self.type, str):
-            m = Class.classes[self.type].get_methods()
-            for me in m:
-                if me.name == self.method:
-                    if me.builtin == True:
-                        self.method = self.method.lower()
-                        break
+            ms = Class.classes[self.type].get_method_names()
+            try:
+                if self.method in ms:
+                    self.method = self.method.lower()
+            except:
+                ASTError(SYNTAX, f"Method {self.method} does not exist for type {self.type}")
             
         if self.type == INT:
             if self.method not in Int.methods:

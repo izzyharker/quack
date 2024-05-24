@@ -492,12 +492,15 @@ class ParseTree():
                     self.eat(r"=")
                     r_expr = self.L_Expr()
                     self.eat(";")
-                    l_expr.assign(r_expr, r_expr.type)
+                    if isinstance(r_expr, ast.Call):
+                        l_expr.assign(r_expr, r_expr.ret_type)
+                    else:
+                        l_expr.assign(r_expr, r_expr.type)
                     log.debug(f"l_expr: {l_expr}")
                     stmt = ast.Assign(l_expr, r_expr, declared_type)
 
                     if isinstance(r_expr, ast.Call):
-                        stmt.type = r_expr.ret_type
+                        stmt.set_type(r_expr.ret_type)
 
                     block.append(stmt)
                     log.info(f"{stmt}")
@@ -700,7 +703,7 @@ def main():
     qk.Obj.ASM_FILE = f"{out_file}.asm"
     f = open(qk.Obj.ASM_FILE, "w+")
     # write header information
-    print(f"\n.class {out_file}:Obj", file=f)
+    print(f".class {out_file}:Obj", file=f)
     print(".method $constructor", file=f, end="")
 
     first = True
