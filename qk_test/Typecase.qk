@@ -1,0 +1,8 @@
+x = 1;
+
+typecase x {
+    x: Int { z = x + 1; }
+    x: Obj { "Oh no\n".print(); }
+}
+
+z.print();

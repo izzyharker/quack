@@ -1,8 +1,9 @@
 class Pt(x: Int) {
     this.x = x;
 
-    def test() : Nothing {
+    def test() : Int {
         "test\n".print();
+        return 1;
     }
 }
 

@@ -16,9 +16,11 @@ class ASTNode():
     loops = 0
     block_label = 0
     boolcomp_label = 0
+    typecase_label = 0
+    typecase_gen_label = 0
 
     def __init__(self):
-        self.type = NOTHING
+        self.ret_type = NOTHING
     
     def gen_if_label():
         ret = f"{ASTNode.if_stmts}"
@@ -48,6 +50,16 @@ class ASTNode():
     def gen_boolcomp_label():
         ret = f"cont{ASTNode.boolcomp_label}"
         ASTNode.boolcomp_label += 1
+        return ret
+    
+    def gen_typecase_label():
+        ret = f"{ASTNode.typecase_label}"
+        ASTNode.typecase_label += 1
+        return ret
+    
+    def gen_typecase_gen_label():
+        ret = f"{ASTNode.typecase_gen_label}"
+        ASTNode.typecase_gen_label += 1
         return ret
 
 class Block(ASTNode):
@@ -98,9 +110,6 @@ class Expression(ASTNode):
         with open(Obj.ASM_FILE, "a") as f:
             print(f"\tcall {node_types[self.type]}:{self.op}", file=f)
         f.close()
-        # print(f"\tcall Int:{Operator.ops[self.op]}")
-        
-        pass
 
     def __str__(self):
         return f"Expression: ({self.left} {self.token} {self.right})"
@@ -112,7 +121,7 @@ class BoolComp(ASTNode):
         self.type = BOOL
 
         if right.type != BOOL or left.type != BOOL:
-            ASTError(TYPE, f"Comparison can only be executed for Boolean values, not {node_types[self.left.type]}, {node_types[self.right.type]}.")
+            ASTError(TYPE, f"And/Or Comparison can only be executed for Boolean values, not {node_types[self.left.type]}, {node_types[self.right.type]}.")
 
         if op in ["and", "or"]:
             self.op = op
@@ -120,7 +129,7 @@ class BoolComp(ASTNode):
             raise SyntaxError(f"op {op} does not exist in Quack!")
         
     def __str__(self):
-        return f"BoolComp: {self.left} {self.op} {self.right}"
+        return f"BoolComp: {self.left} <{self.op}> {self.right}"
     
     def eval_or(self) -> None:
         # generate label
@@ -189,7 +198,7 @@ class IntComp(ASTNode):
             raise SyntaxError(f"op {op} does not exist in Quack!")
         
     def __str__(self):
-        return f"IntComp: {self.left} {self.op} {self.right}, type = {self.eval_type}"
+        return f"IntComp: {self.left} _{self.op}_ {self.right}, type = {self.eval_type}"
     
     def evaluate(self):
         if self.op[0] == "<":
@@ -226,7 +235,7 @@ class Not(ASTNode):
         elif isinstance(expr, BoolComp):
             self.expr = BoolComp(expr.right, expr.left, expr.op)
         else:
-            ASTNode.error(TYPE, "Not can only be applied to boolean expressions.")
+            ASTError(TYPE, "Not can only be applied to boolean expressions.")
 
     def __str__(self):
         return f"Not: {self.expr}"
@@ -236,16 +245,23 @@ class Not(ASTNode):
         self.expr.evaluate()
 
 class Assign(ASTNode):
-    def __init__(self, var: Variable | str, val: Obj, declared_type: int = None):
+    def __init__(self, var: Variable, val: Obj | ASTNode, declared_type: int = None):
         self.var = var
         self.val = val
         if declared_type is not None:
             self.type = declared_type
             if self.val.type != self.type:
                 ASTError(TYPE, f"Declared variable type {node_types[self.type]} must match expression type {node_types[val.type]}.")
+        elif isinstance(val, Call):
+            self.type = val.type
+            var.type = self.type
+        else:
+            self.type = self.var.type
+        
+
 
     def __str__(self):
-        return f"Assign: {self.var}, {self.val}"
+        return f"Assign: {self.var}, {self.val} <{self.type}>"
     
     def evaluate(self):
         self.val.evaluate()
@@ -262,11 +278,11 @@ class Return(ASTNode):
         if self.ret is not None:
             self.ret.evaluate()
             with open(Obj.ASM_FILE, "a+") as f:
-                print(f"\treturn 1", file=f)
+                print(f"\treturn ", file=f, end="")
             f.close()
         else:
             with open(Obj.ASM_FILE, "a+") as f:
-                print(f"\treturn 0", file=f)
+                print(f"\treturn ", file=f, end="")
             f.close()
         return self.ret.type
 
@@ -279,7 +295,7 @@ class IfNode(ASTNode):
             ASTError(TYPE, f"Conditional statement <{self.cond}, {type(self.cond)}> must be a bool!")
 
     def __str__(self):
-        return f"If: {self.cond}"
+        return f"If: {self.cond}, [{self.statement}]"
     
     def evaluate(self):
         pass
@@ -294,7 +310,7 @@ class ElifNode(ASTNode):
             ASTError(TYPE, "Conditional statement must be a bool!")
 
     def __str__(self):
-        return f"Elif: {self.cond}"
+        return f"Elif: {self.cond} [{self.statement}]"
     
     def evaluate(self):
         pass
@@ -304,7 +320,7 @@ class ElseNode(ASTNode):
         self.statement = block
 
     def __str__(self):
-        return "Else: "
+        return f"Else: [{self.statement}]"
     
     def evaluate(self):
         self.statement.evaluate()
@@ -375,7 +391,7 @@ class While(ASTNode):
             ASTError(TYPE, "Conditional statement must be a bool!")
 
     def __str__(self):
-        return f"While: ({self.cond}) {self.statement}"
+        return f"While: {self.cond} [{self.statement}]"
     
     def evaluate(self):
         loop = ASTNode.gen_loop_label()
@@ -398,40 +414,38 @@ class While(ASTNode):
 
 class Field(ASTNode):
     # field access of a class instance
-    def __init__(self, var: Obj | ASTNode = None, expr: str = None):
+    def __init__(self, belongs: Obj | ASTNode = None, field: str = None):
         # expression/assignemnt
-        self.expr = expr
+        self.field = field
         # name of variable
-        self.var = var
+        self.belongs = belongs
         self.val = None
 
-        if var is not None:
-            self.type = var.type
+        self.type = OBJ
 
     def __str__(self):
-        return f"{self.var}.{self.expr}"
+        return f"Field: {self.belongs}.{self.field}, <{self.type}>"
     
     def evaluate(self):
         with open(Obj.ASM_FILE, "a+") as f:
-            print(f"\tload $\n\tload $:{self.var}", file=f)
+            print(f"\tload $\n\tload_field $:{self.field}", file=f)
         f.close()
 
     def store(self):
-        if self.var.name == "this":
+        if self.belongs.name == "this":
             this = "$"
         else:
-            this = self.var
+            this = self.belongs
 
         with open(Obj.ASM_FILE, "a+") as f:
-            print(f"\tload {this}\n\tstore_field {this}:{self.expr}", file=f)
+            print(f"\tload {this}\n\tstore_field {this}:{self.field}", file=f)
         f.close()
 
-    def assign(self, val, type):
+    def assign(self, val: Obj | ASTNode, type = None):
         self.val = val
         self.type = type
-
-    def set_var(self, var):
-        self.var = var
+        if type is None:
+            self.type = val.type
 
 # formal parameters for a method
 class Params(ASTNode):
@@ -475,10 +489,7 @@ class Method(ASTNode):
 
         self.args = args
         # return type of method
-        if isinstance(ret, int):
-            self.type = node_types[ret]
-        else:
-            self.type = ret
+        self.type = ret
         # statements
         self.block = block
 
@@ -488,7 +499,6 @@ class Method(ASTNode):
         self.builtin = False
 
         if self.name in ["PRINT", "EQUALS", "STRING", "LESS", "PLUS", "MINUS", "DIVIDE", "MULTIPLY"]:
-            self.name = self.name.lower()
             self.builtin = True
 
 
@@ -513,13 +523,13 @@ class Method(ASTNode):
             print(f"\n.method {self.name}", file=f)
             args = self.args.get_param_names()
             if args != f"":
-                print(f"\t.local {self.args.get_param_names()}", file=f)
+                print(f"\t.local {args}", file=f)
         f.close()
         ret = self.block.evaluate()
-        if ret != self.type:
-            ASTError(TYPE, f"Return value of {ret} does not matched declared return value {self.type}")
-            
-
+        with open(Obj.ASM_FILE, "+a") as f:
+            print(f"{len(self.args.get_params())}", file=f)
+        # if ret != self.type:
+            # ASTError(TYPE, f"Return value of {ret} does not matched declared return value {self.type}")
 
 
 class ClassBody(ASTNode):
@@ -535,6 +545,9 @@ class ClassBody(ASTNode):
     
     def add_method(self, m: Method):
         self.methods.append(m)
+
+    def get_methods(self):
+        return self.methods
 
     def evaluate(self):
         self.statements.evaluate()
@@ -564,12 +577,13 @@ class Class(ASTNode):
         Class.classes[self.name] = self
 
     def __str__(self):
-        return f"Class: {self.name} ({self.params}) -> {self.parent}"
+        return f"Class: {self.name} ({self.params}) -> {self.parent}\nFields: {self.fields}\nMethods: {self.get_method_names()}"
     
     def get_method_names(self):
         m = []
-        for method in self.class_body.methods:
-            m.append(method.name)
+        if self.class_body is not None:
+            for method in self.class_body.methods:
+                m.append(method.name)
         return m
     
     def get_params(self):
@@ -577,6 +591,9 @@ class Class(ASTNode):
     
     def set_body(self, body: ClassBody):
         self.class_body = body
+
+    def get_methods(self):
+        return self.class_body.get_methods()
     
     def add_field(self, name: str, type: int | str):
         self.fields[name] = type
@@ -588,7 +605,9 @@ class Class(ASTNode):
         else:
             inherit = self.parent
 
-        with open(Obj.ASM_FILE, "a+") as f:
+        Obj.ASM_FILE = f"{self.name}.asm"
+
+        with open(Obj.ASM_FILE, "w+") as f:
             print(f".class {self.name}:{inherit}", file=f)
             for field in self.fields.keys():
                 print(f".field {field}", file=f)
@@ -637,31 +656,115 @@ class UserClassInstance(ASTNode):
             print(f"\tnew {self.type}\n\tcall {self.type}:$constructor", file=f)
         f.close()
 
+class TypecaseCase(ASTNode):
+    def __init__(self, test, test_type, statement: Block):
+        self.name = test
+        self.type = test_type
+        self.statements = statement
+    
+    def __str__(self):
+        return f"{self.name} : {self.type} [{self.statements}]"
+    
+    def evaluate_check(self, label):
+        if isinstance(self.type, int):
+            t = node_types[self.type]
+        else:
+            t = self.type
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"\tis_instance {t}", file=f)
+            print(f"\tjump_if it_is{label}", file=f)
+        f.close()
+
+    def evaluate_block(self, label, tl):
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"it_is{label}:", file=f)
+        f.close()
+        self.statements.evaluate()
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"\tjump next{tl}", file=f)
+        f.close()
+
+class Typecase(ASTNode):
+    def __init__(self, test: Obj | ASTNode, cases: list[TypecaseCase] = []):
+        self.test = test
+        self.cases = cases
+
+    def add_case(self, new_case: TypecaseCase):
+        self.cases.append(new_case)
+
+    def __str__(self):
+        f = f"typecase {self.test}: "
+        for case in self.cases:
+            f += f"{case}, "
+        return f
+    
+    def evaluate(self):
+        labels = []
+        tl = ASTNode.gen_typecase_gen_label()
+        for c in self.cases:
+            label = ASTNode.gen_typecase_label()
+            labels.append(label)
+            with open(Obj.ASM_FILE, "a") as f:
+                print(f"\tload {self.test}", file=f)
+            f.close()
+            c.evaluate_check(label)
+        
+        for c, l in zip(self.cases, labels):
+            c.evaluate_block(l, tl)
+        
+        with open(Obj.ASM_FILE, "a") as f:
+            print(f"next{tl}:", file=f)
+        f.close()
+        
+
 # TODO: generalize to all calls
 class Call(ASTNode):
-    def __init__(self, var: Obj | ASTNode, method: str, args: Params):
-        self.var = None
+    def __init__(self, var: Obj | ASTNode = None, method: str = None, args: Params = None):
+        self.var = var
+        self.ret_type = None
         self.type = None
 
         self.args = args
         if var is not None:
-            self.var = var
             self.type = var.type
 
         self.method = method
 
+        self.ret_type = None
+
+        if self.type is not None:
+            self.check_method()
+
+    def check_method(self):
+        if isinstance(self.ret_type, str):
+            ms = Class.classes[self.ret_type].get_methods()
+            for m in ms:
+                if m.name == self.method:
+                    self.ret_type = m.type
+
     def assign_var(self, expr: Obj | ASTNode):
         self.var = expr
-        self.type = expr.type
+        self.ret_type = expr.type
+        self.check_method()
 
     def __str__(self):
-        return f"Call: {self.var}.{self.method}({self.args}), type={self.var.type}"
+        return f"Call: {self.var}<{self.type}>.{self.method}({self.args}), ret_type={self.ret_type}"
     
     def evaluate(self) -> None:
         """
         Eventually include type checking in this
         """
         calling = ""
+
+        # for built-ins - make lower in assembly
+        if isinstance(self.type, str):
+            m = Class.classes[self.type].get_methods()
+            for me in m:
+                if me.name == self.method:
+                    if me.builtin == True:
+                        self.method = self.method.lower()
+                        break
+            
         if self.type == INT:
             if self.method not in Int.methods:
                 raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")

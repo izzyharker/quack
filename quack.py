@@ -325,10 +325,7 @@ class ParseTree():
                 return rhs
             # otherwise return a field access instance with the value and the rhs
             else:
-                rhs = ast.Field(None, rhs)
-                rhs.set_var(expr)
-                log.debug(f"Field access: {rhs}")
-                ParseTree.current_class.add_field(rhs.expr, rhs.var.type)
+                rhs = ast.Field(expr, rhs)
             return rhs
 
         return expr
@@ -412,7 +409,29 @@ class ParseTree():
             match = match.group()
             self.eat(num_to_jump=len(match))
             expr = self.L_Expr()
+            self.eat(r";")
             return ast.Return(expr)
+
+    def Typecase(self):
+        if re.match(r"typecase\s", self.program[self.pc:]):
+            self.eat(num_to_jump=8)
+            test = self.L_Expr()
+            log.debug(f"test = {test}")
+
+            self.eat(r"\{")
+            typecase = ast.Typecase(test)
+            while re.match(r"\}", self.program[self.pc:]) is None:
+                check = self.ident()
+                self.eat(r":")
+                classtype = self.class_ident()
+                self.eat(r"\{")
+                block = []
+                self.Statement_Block(r"\}", block)
+                typecase.add_case(ast.TypecaseCase(check, classtype, ast.Block(block)))
+            self.eat(r"\}")
+            return typecase
+        else:
+            self.error("???????????")
 
     def Statement(self, nested: list = None):
         """
@@ -427,6 +446,13 @@ class ParseTree():
         else:
             block = nested
         self.check_comment()
+
+        # check typecase
+        if re.match(r"typecase\s", self.program[self.pc:]):
+            node = self.Typecase()
+            block.append(node)
+            log.info(node)
+            return
 
         # check return
         if re.match(r"return\s", self.program[self.pc:]):
@@ -470,9 +496,14 @@ class ParseTree():
                     log.debug(f"l_expr: {l_expr}")
                     stmt = ast.Assign(l_expr, r_expr, declared_type)
 
+                    if isinstance(r_expr, ast.Call):
+                        stmt.type = r_expr.ret_type
+
                     block.append(stmt)
-                    log.debug(f"{stmt}")
                     log.info(f"{stmt}")
+                    if self.state == ParseTree.CLASS and isinstance(l_expr, ast.Field):
+                        ParseTree.current_class.add_field(l_expr.field, r_expr.type)
+                        log.info(f"Class {ParseTree.current_class.name}: added field ({l_expr.field}, {r_expr.type})")
                     return
                 
             # method call/etc.
@@ -600,7 +631,11 @@ class ParseTree():
         new_class = ast.Class(classname, args, None, parent)
         log.info(f"Parsing {new_class}\n--------------")
         ParseTree.current_class = new_class
+
+        ParseTree.live_variables = {a[0]: qk.Variable(a[0], a[1], None) for a in args}
+
         new_class.set_body(self.ClassBody())
+
         log.debug(f"{new_class}")
         log.info(f"Successfully parsed {new_class}\n-------------------")
         ParseTree.classes.append(new_class.name)
@@ -662,7 +697,8 @@ def main():
     for c in ParseTree.classes:
         ast.Class.classes[c].evaluate()
 
-    f = open(qk.Obj.ASM_FILE, "a")
+    qk.Obj.ASM_FILE = f"{out_file}.asm"
+    f = open(qk.Obj.ASM_FILE, "w+")
     # write header information
     print(f"\n.class {out_file}:Obj", file=f)
     print(".method $constructor", file=f, end="")
