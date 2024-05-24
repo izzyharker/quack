@@ -1,0 +1,6 @@
+filename=$(basename -- "$1")
+extension="#{filename##*.}"
+filename="${filename%.*}"
+
+cd vm;
+./bin/tiny_vm $filename;

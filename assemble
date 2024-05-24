@@ -1,0 +1,8 @@
+filename=$(basename -- "$1")
+extension="#{filename##*.}"
+filename="${filename%.*}"
+
+echo "Compiling...";
+cd vm;
+python assemble.py ../$filename.asm ./OBJ/$filename.json;
+echo "done. " ;
