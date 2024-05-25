@@ -39,6 +39,8 @@ Declared variables, fields, assignments, method arguments, calls and return valu
 
 Uninitialized variables - these will throw an error, but the error isn't that it's uninitilized. Rather, new variables all get type NOTHING, and the error is thrown on a type check. 
 
+Short strings ("...") - Certain \c characters are meant to be illegal - they are allowed. I had many issues with the regex for this and eventually decided that making other things work (classes, type checking, etc.) was higher priority. 
+
 # Notes
 I admitted defeat for certain aspects of this compiler, slightly because of time purposes (I am in Wisconsin for Nationals and had less time than I anticipated to work) but mainly because I made some structural choices early on that I didn't realize would be problems until I attempted some of the harder aspects such as flow-sensitive analysis, and fixing these issues would require basically rewriting everything. This made it difficult to properly implement certain features like flow-sensitive analysis and static typing for variables. 
 
