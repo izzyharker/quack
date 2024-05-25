@@ -326,9 +326,9 @@ class ParseTree():
             # otherwise return a field access instance with the value and the rhs
             else:
                 f = ast.Field(expr, rhs)
-                if ParseTree.live_variables is not None and expr.name == "this":
-                    log.info(f"Field access: {rhs}. Checking against live variables {ParseTree.live_variables}")
-                    f.type = ParseTree.live_variables[rhs].type
+                if ParseTree.live_variables is not None and expr.name == "this" and self.state != ParseTree.CLASS:
+                    log.info(f"Field access: {rhs}. Checking against fields variables {ParseTree.current_class.fields}")
+                    f.type = ParseTree.current_class.fields[rhs]
                 return f
 
         return expr
@@ -604,6 +604,7 @@ class ParseTree():
         log.debug(f"Statement block: {body.statements}")
         log.info(f"finished statements, looking for method call at {self.program[self.pc:self.pc + 12]}")
 
+        self.state = ParseTree.NORMAL
         while self.pc < self.len and re.match(r"def", self.program[self.pc:]) is not None:
             log.debug("Found a new method!")
             body.add_method(self.Method())
@@ -695,9 +696,8 @@ def main():
 
     for c in ParseTree.classes:
         ast.Class.classes[c].evaluate()
-
-    if ParseTree.classes != []:
-        out_file = "$Main"
+        if c == out_file:
+            out_file = "Main"
 
     qk.Obj.ASM_FILE = f"{out_file}.asm"
 

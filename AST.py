@@ -790,7 +790,7 @@ class Call(ASTNode):
         # builtins which take no arguments
         if self.method in ["print", "string"]:
             if self.args is not None and len(self.args) != 0:
-                ASTError(SYNTAX, f"Method {self.method} takes 0 arguments, {len(self.args.get_params())} given.")
+                ASTError(SYNTAX, f"Method {self.method} takes 0 arguments, {len(self.args)} given.")
         elif self.method in ["equals", "less", "add", "minus", "times", "divide"]:
             p = self.args
             if self.args is None or len(p) > 1 or len(p) == 0:

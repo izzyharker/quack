@@ -407,7 +407,7 @@ struct  class_struct  the_class_Boolean_struct = {
                  method_Boolean_constructor, // constructor
                  method_Boolean_string, // STRING
                  method_Obj_print, // PRINT
-                 method_Obj_equals  // EQUALS
+                 method_Obj_equals,  // EQUALS
                 }
 };
 

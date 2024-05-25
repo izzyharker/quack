@@ -2,7 +2,7 @@ filename=$(basename -- "$1")
 extension="#{filename##*.}"
 filename="${filename%.*}"
 
-echo "Compiling...";
+echo "Compiling $filename";
 cd vm;
 python assemble.py ../$filename.asm ./OBJ/$filename.json;
 echo "done. " ;

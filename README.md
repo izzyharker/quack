@@ -1,13 +1,24 @@
 # Quack
 
 # Running
-Two bash scripts are provided. `quack` will compile and execute, and `quackc` will compile but not execute a given program.
+Many bash scripts are provided. `quack` will compile and execute, and `quackc` will compile but not execute a given program. Additionally, `compile` will compile a .qk file to .asm, `assemble` will assemble it into object code, and `run` will run an assembled program. 
 
-Both script will produce a .asm file with the same name as the input .qk file containing a single class of the same name. (For example, `./quack qk_test/If.qk` will compile If.asm and run If.json in the tiny_vm).
+Scripts will produce a .asm file with the same name as the input .qk file containing a single class of the same name, so long as additional classes are not defined. (For example, `./quack qk_test/If.qk` will compile If.asm and run If.json in the tiny_vm). 
 
-Some tests are given in the directory `qk_test/`. Bad test files follow the naming convention `Bad_xxxx.qk`, and demonstrate a program error that the quack compiler will catch.
+If the file contains multiple class definitions (such as the sample `ReturnCheck`), a separate .asm file will be created with the name of each class, as well as a class containing [TODO]
 
-It is possible, but unlikely, that you will need to re-compile the tiny vm. This can be done by running the following commands, in-order.
+For example, to run `ReturnCheck.qk`, the sequence would be
+```
+./compile ReturnCheck.qk
+./assemble Test.asm
+./assemble ReturnCheck.asm
+./run ReturnCheck
+```
+`Class.qk` is the other 
+
+Some tests are given in the directory `qk_test/`. Bad test files follow the naming convention `bad_xxxx.qk`, and demonstrate a program error that the quack compiler will catch. The specific compiler error might seem a bit weird but the point it that it won't work. This can be tested with either `compile` or `quack[c]`, since the error is in the compilation step.
+
+It is possible that you will need to re-compile the tiny vm. This can be done by running the following commands, in-order.
 ```
 cd vm
 cmake -Bcmake-build-debug -S.
@@ -15,19 +26,20 @@ cd cmake-build-debug
 make
 ```
 
-# What does the compiler do at this point?
+# Things that work
 ## Parsing
-Currently, `quack.py` compiles a sequence of statements, including variables. Control flow and integer comparison operations (<, >, ==) are implemented, however boolean comparisons `and`, `or` are not 100% correct. They parse correctly and are added to the AST, however the assembly instructions are wrong because I wasn't sure what it was supposed to look like.
-
-Method calls are also allowed on built-in variables, specifically print. I would be wary of trying anything else because only print has been rigorously tested. 
+All major features of Quack except one work in the test cases I have provided (see later for elaboration).
 
 ## Type-checking
-Type checking is implemented for declared variables, arithmetic expressions, and conditional statements. For declared variables, a declared type overrides assignment. Binary operators must have the same type for both operands, regardless of what that type is, and conditional statements must be Boolean values. 
+Declared variables, fields, assignments, method arguments, calls and return values from calls, method calls on objects.
 
-## Flow-sensitive analysis
-I have not gotten here yet. 
+# Things that don't work (or sort of don't work)
 
-# Note
-I'm not sure where we were supposed to be by this assignment but I'm pretty sure I'm not all the way there. I'm still working on it and am not too worried about getting everything functional by the end of the term/final due date for the project at this point. 
+`x.y.z` - only one field access parses correctly. I know why this is a problem but it would be likely very difficult/annoying to fix.
 
-I just wanted to make sure I submitted something to show my progress by the end of the weekend for this, so here's where I'm at.
+Uninitialized variables - these will throw an error, but the error isn't that it's uninitilized. Rather, new variables all get type NOTHING, and the error is thrown on a type check. 
+
+# Notes
+I admitted defeat for certain aspects of this compiler, slightly because of time purposes (I am in Wisconsin for Nationals and had less time than I anticipated to work) but mainly because I made some structural choices early on that I didn't realize would be problems until I attempted some of the harder aspects such as flow-sensitive analysis, and fixing these issues would require basically rewriting everything. This made it difficult to properly implement certain features like flow-sensitive analysis and static typing for variables. 
+
+I also kept running into small errors due to these structural decisions, and I wasn't able to test the system as extensively as I would have liked. 
