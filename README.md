@@ -16,7 +16,7 @@ For example, to run `ReturnCheck.qk`, the sequence would be
 ```
 `Class.qk` is the other 
 
-Some tests are given in the directory `qk_test/`. Bad test files follow the naming convention `bad_xxxx.qk`, and demonstrate a program error that the quack compiler will catch. The specific compiler error might seem a bit weird but the point it that it won't work. This can be tested with either `compile` or `quack[c]`, since the error is in the compilation step.
+A number of tests are given in the directory `tests/`. Bad test files follow the naming convention `bad_xxxx.qk`, and demonstrate a program error that the quack compiler will catch. The specific compiler error might seem a bit weird but the point it that it won't work. This can be tested with either `compile` or `quack[c]`, since the error is in the compilation step. The test files are all named for the feature that they demonstrate.
 
 It is possible that you will need to re-compile the tiny vm. This can be done by running the following commands, in-order.
 ```
