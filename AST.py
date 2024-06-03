@@ -333,8 +333,9 @@ class Expression(ASTNode):
         if isinstance(self.left, str):
             left = ASTNode.locate_var(self.left)
             self.left = Variable(self.left, left)
-        else:
-            left = self.left.type
+        
+        self.left.check()
+        left = self.left.type
 
         if left is None:
             ASTError(SYNTAX, f"Uninitialized variable {self.left}")
@@ -342,8 +343,9 @@ class Expression(ASTNode):
         if isinstance(self.right, str):
             right = ASTNode.locate_var(self.right)
             self.right = Variable(self.right, right)
-        else:
-            right = self.right.type
+        
+        self.right.check()
+        right = self.right.type
 
         if right is None:
             ASTError(SYNTAX, f"Uninitialized variable {self.right}")
@@ -573,16 +575,16 @@ class Assign(ASTNode):
         if isinstance(self.val, str):
             val = ASTNode.locate_var(self.val)
             self.val = Variable(self.val, val)
-        else:
-            self.val.check()
-            val = self.val.type
+
+        self.val.check()
+        val = self.val.type
 
         if val is None:
             ASTError(SYNTAX, f"Uninitialized variable {self.val}")
 
         if val != self.var.type and self.var.type != "Nothing":
-            if self.static:
-                ASTError(TYPE, f"Cannot assign type {val} to variable of declared type {self.type}")
+            if self.static or isinstance(self.var, Field):
+                ASTError(TYPE, f"Cannot assign type {val} to variable or field of declared type {self.type}")
             warnings.warn(f"Reassigning variable {self.var} to type {val}")
             self.var.type = val
         else:
@@ -613,9 +615,9 @@ class Return(ASTNode):
     def evaluate(self):
         if self.ret is not None:
             self.ret.evaluate()
-        # with open(Obj.ASM_FILE, "a+") as f:
-        #     print(f"\treturn ", file=f, end="")
-        # f.close()
+        
+        log.info(f"{self}")
+
         ASTNode.buffer += f"\treturn "
         if self.ret is None:
             return "Nothing"
@@ -811,6 +813,8 @@ class Field(ASTNode):
             ASTNode.buffer += f"\tload {this}\n\tload_field {this}:{self.field}\n"
         else:
             this = ASTNode.locate_var(self.belongs)
+            if this == ASTNode.parsing_class:
+                this = "$"
             ASTNode.buffer += f"\tload {self.belongs}\n\tload_field {this}:{self.field}\n"
         return self.type
 
@@ -822,6 +826,8 @@ class Field(ASTNode):
         else:
             self.check()
             this = self.belongs
+            if self.belongs == ASTNode.parsing_class:
+                this = "$"
 
         ASTNode.buffer += f"\tload {this}\n\tstore_field {this}:{self.field}\n"
         return self.type
@@ -898,7 +904,12 @@ class Method(ASTNode):
     def __str__(self):
         return f"Method: {self.name}({self.args}) -> {self.type}"
     
+    def check(self):
+        if self.builtin:
+            self.name = self.name.lower()
+    
     def evaluate(self):
+        self.check()
         log.info(f"{self}")
         ASTNode.buffer += f"\n.method {self.name}\n"
 
@@ -921,12 +932,22 @@ class Method(ASTNode):
 
         temp_buffer += f"\tenter\n"
 
-        ASTNode.buffer = temp_buffer + ASTNode.buffer + f"{len(self.args.params)}"
+        # workaround that hopefully doesn't backfire - it's a very specific stack problem, basically if method returns nothing and the last statement in a method isn't loading a thing, the stack gets double-popped and messes up. 
+        if self.type == "Nothing" or self.name == "print":
+            ASTNode.buffer += f"\tload $\n"
+
+        if not isinstance(self.block.statements[-1], Return):
+            ASTNode.buffer += f"\treturn "
+            
+        ASTNode.buffer += f"{len(self.args.params)}\n"
+
+        ASTNode.buffer = temp_buffer + ASTNode.buffer
 
         if ret is None and self.type == "Nothing":
             return
         if ret != self.type:
             ASTError(TYPE, f"Return value of {ret} does not matched declared return value {self.type}")
+
 
         ASTNode.print_buffer()
         ASTNode.reset_variables()
@@ -1074,6 +1095,7 @@ class UserClassInstance(ASTNode):
 
         if len(c.get_params()) == len(self.args) and c.get_params() != []:
             for a, c in zip(self.args, c.get_params()):
+                a.check()
                 if a.type != c:
                     ASTError(TYPE, f"Type {a.type} does not match constructor type {c}")
         elif len(self.args) != 0:
@@ -1089,7 +1111,10 @@ class UserClassInstance(ASTNode):
         # with open(Obj.ASM_FILE, "a") as f:
         #     print(f"\tnew {self.type}\n\tcall {self.type}:$constructor", file=f)
         # f.close()
-        ASTNode.buffer += f"\tnew {self.type}\n\tcall {self.type}:$constructor\n"
+        t = self.type
+        if self.type == ASTNode.parsing_class:
+            t = "$"
+        ASTNode.buffer += f"\tnew {t}\n\tcall {t}:$constructor\n"
 
 class TypecaseCase(ASTNode):
     def __init__(self, test, test_type, statement: Block):
@@ -1250,6 +1275,9 @@ class Call(ASTNode):
 
         ASTNode.buffer += f"\tcall {calling}:{self.method}\n"
 
-        # log.debug(f"-----------\n{ASTNode.buffer}*\n------------")
+        # if method returns nothing, pop result
+        # if self.type == "Nothing":
+        #     ASTNode.buffer += f"\tpop\n"
 
+        # log.debug(f"-----------\n{ASTNode.buffer}*\n------------")
         return self.type

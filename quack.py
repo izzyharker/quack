@@ -46,6 +46,7 @@ class ParseTree():
             token = self.program[self.pc]
 
     def check_comment(self) -> None:
+        # log.debug("Checking comment")
         # eat short-form comment
         match = re.match(r"//.*\n", self.program[self.pc:])
         if match is not None:
@@ -54,10 +55,11 @@ class ParseTree():
             return
         
         # eat long form comment
-        match = re.match(r"/\*.*\*/", self.program[self.pc:])
+        match = re.match(r"/\*", self.program[self.pc:])
         if match is not None:
-            match = match.group()
-            self.eat(r"/\*.*\*/", len(match))
+            while re.match(r"\*/", self.program[self.pc:]) is None:
+                self.eat()
+            self.eat(r"\*/", num_to_jump=2)
             return
         
     def eat(self, expect: str = r".", num_to_jump: int = 1) -> None:
@@ -144,7 +146,7 @@ class ParseTree():
         match = re.match(keywords + r"[^\w^\_]", self.program[self.pc:])
         if match is None:
             # now check variable name - start with letter, then any letter, digit, or underscore
-            match = re.match(r"[a-zA-Z][\w\_]*", self.program[self.pc:])
+            match = re.match(r"[a-zA-Z\_][\w\_]*", self.program[self.pc:])
             if match is not None:
                 match = match.group()
                 self.eat(num_to_jump=len(match))
@@ -164,7 +166,7 @@ class ParseTree():
         match = re.match(keywords + r"[^\w^\_]", self.program[self.pc:])
         if match is None:
             # now check variable name - start with letter, then any letter, digit, or underscore
-            match = re.match(r"[a-zA-Z][\w\_]*", self.program[self.pc:])
+            match = re.match(r"[a-zA-Z\_][\w\_]*", self.program[self.pc:])
             if match is not None:
                 match = match.group()
                 self.eat(num_to_jump=len(match))
@@ -192,7 +194,7 @@ class ParseTree():
             return args
         
         while True:
-            args.append(self.literal())
+            args.append(self.R_Expr())
             if re.match(r",", self.program[self.pc:]) is None:
                 if re.match(r"\)", self.program[self.pc:]) is None:
                     self.error(f"Expected ',' or ')' to end arguments, got {self.program[self.pc:self.pc + 12]}")
@@ -447,6 +449,7 @@ class ParseTree():
             block = ParseTree.statements
         else:
             block = nested
+
         self.check_comment()
 
         # check typecase
@@ -569,6 +572,8 @@ class ParseTree():
         return body
     
     def Class(self):
+        self.check_comment()
+
         self.state = ParseTree.CLASS
         match = re.match(r"class", self.program[self.pc:])
         # this is a bit redundant but whatever
@@ -604,6 +609,7 @@ class ParseTree():
         return
     
     def Parse(self):
+        self.check_comment()
         # evaluate 0 or more class statements
         while self.pc < self.len and re.match(r"class", self.program[self.pc:]) is not None:
             self.Class()
