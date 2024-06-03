@@ -3,6 +3,7 @@ class Pt(x: Int) {
 
     def test() : Int {
         "test\n".print();
+        this.x.print();
         return 1;
     }
 }

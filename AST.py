@@ -1,4 +1,3 @@
-from qk_builtins import *
 import warnings
 import logging as log
 
@@ -26,6 +25,9 @@ class Obj():
         self.type = "Obj"
 
     def get_type(self) -> str:
+        return self.type
+
+    def check(self):
         return self.type
 
     def evaluate(self):
@@ -176,6 +178,8 @@ class ASTNode():
     buffer = f""
     program = f""
 
+    parsing_class = None
+
     def __init__(self):
         self.ret_type = "Nothing"
     
@@ -265,6 +269,9 @@ class ASTNode():
             print(ASTNode.program, file=f, end="")
         f.close()
         ASTNode.program = f""
+
+    def set_parse_class(name: str):
+        ASTNode.parsing_class = name
 
 """
 Block class: List of statements, to be evaluated in order.
@@ -562,9 +569,12 @@ class Assign(ASTNode):
         # If we assigned a variable to another variable, 
         # Locate it in the current live set.
         val = self.val
+        # TODO: if this is a field, check the field name against class fields
         if isinstance(self.val, str):
             val = ASTNode.locate_var(self.val)
+            self.val = Variable(self.val, val)
         else:
+            self.val.check()
             val = self.val.type
 
         if val is None:
@@ -577,6 +587,7 @@ class Assign(ASTNode):
             self.var.type = val
         else:
             self.var.type = val
+        self.type = val
         
     def set_type(self, t):
         self.type = t
@@ -587,9 +598,9 @@ class Assign(ASTNode):
     
     def evaluate(self):
         self.check()
-        log.info(f"{self}")
         self.val.evaluate()
         self.var.store()
+        log.info(f"{self}")
 
 class Return(ASTNode):
     def __init__(self, ret: Obj | ASTNode):
@@ -756,7 +767,6 @@ class While(ASTNode):
         # f.close()
         ASTNode.buffer += f"\tjump startl{loop}\nendl{loop}:\n"
 
-# TODO: figure out adding fields to classes scheme
 class Field(ASTNode):
     # field access of a class instance
     def __init__(self, belongs: Obj | ASTNode = None, field: str | Variable = None):
@@ -765,9 +775,8 @@ class Field(ASTNode):
         
         # parent
         self.belongs = belongs
-        self.val = None
 
-        self.type = "Obj"
+        self.type = "Nothing"
 
         if isinstance(field, Variable):
             self.type = field.type
@@ -775,32 +784,47 @@ class Field(ASTNode):
     def __str__(self):
         return f"Field: {self.belongs}.{self.field}, <{self.type}>"
     
-    def evaluate(self):
-        if self.belongs.name == "this":
-            this = "$"
+    def check(self):
+        # check that belongs is initialized
+        if self.belongs == "this":
+            val = ASTNode.parsing_class
         else:
-            this = self.belongs
-        # with open(Obj.ASM_FILE, "a+") as f:
-        #     print(f"\tload $\n\tload_field $:{self.field}", file=f)
-        # f.close()
-        ASTNode.buffer += f"\tload {this}\n\tload_field {this}:{self.field}\n"
+            val = ASTNode.locate_var(self.belongs)
+
+        if val is None:
+            ASTError(SYNTAX, f"Uninitialized variable {self.belongs}")
+        
+        # if it is, check that field is in class type
+        else:
+            try:
+                c = Class.classes[val]
+                val = c.get_field(self.field)
+            except:
+                ASTError(SYNTAX, f"Class {val} does not exist. (Or does not have fields if builtin)")
+        # set type
+        self.type = val
+        
+    def evaluate(self):
+        self.check()
+        if self.belongs == "this":
+            this = "$"
+            ASTNode.buffer += f"\tload {this}\n\tload_field {this}:{self.field}\n"
+        else:
+            this = ASTNode.locate_var(self.belongs)
+            ASTNode.buffer += f"\tload {self.belongs}\n\tload_field {this}:{self.field}\n"
+        return self.type
 
     def store(self):
-        if self.belongs.name == "this":
+        if self.belongs == "this":
+            # add new field to the current parsing class
+            Class.classes[ASTNode.parsing_class].add_field(self.field, self.type)
             this = "$"
         else:
+            self.check()
             this = self.belongs
 
-        # with open(Obj.ASM_FILE, "a+") as f:
-        #     print(f"\tload {this}\n\tstore_field {this}:{self.field}", file=f)
-        # f.close()
-        ASTNode.buffer += f"\tload {this}\n\tstore_field {this}:{self.field}"
-
-    def assign(self, val: Obj | ASTNode, type = None):
-        self.val = val
-        self.type = type
-        if type is None:
-            self.type = val.type
+        ASTNode.buffer += f"\tload {this}\n\tstore_field {this}:{self.field}\n"
+        return self.type
 
 # formal parameters for a method
 class Params(ASTNode):
@@ -840,7 +864,6 @@ class Params(ASTNode):
         return f[0:-1]
     
 
-# TODO: forward declaration for local variables
 class Method(ASTNode):
     def __init__(self, name: str, args: Params | list, ret: int | str, block: Block):
         self.name = name
@@ -875,7 +898,6 @@ class Method(ASTNode):
     def __str__(self):
         return f"Method: {self.name}({self.args}) -> {self.type}"
     
-    # TODO: local variables
     def evaluate(self):
         log.info(f"{self}")
         ASTNode.buffer += f"\n.method {self.name}\n"
@@ -960,6 +982,8 @@ class Class(ASTNode):
 
         Class.classes[self.name] = self
 
+        ASTNode.set_parse_class(self.name)
+
     def __str__(self):
         return f"Class: {self.name} ({self.params}) -> {self.parent}\nFields: {self.fields}\nMethods: {self.get_method_names()}"
     
@@ -981,20 +1005,34 @@ class Class(ASTNode):
     
     def add_field(self, name: str, type: int | str):
         self.fields[name] = type
+    
+    def get_field(self, name):
+        try:
+            return self.fields[name]
+        except:
+            ASTError(f"Field {name} does not exist for class {self.name}")
+
+    def check(self):
+        # check that the parent is a valid class
+        # all other type checks happen later
+        try:
+            c = Class.classes[self.parent]
+        except:
+            if self.parent not in ["Int", "Bool", "Obj", "String", "Nothing"]:
+                ASTError(TYPE, f"Parent class {self.parent} is undefined.")
 
     def evaluate(self):
+        self.check()
         # check if it inherits a builtin class or a new class
-        log.info(f"{self}")
-        if isinstance(self.parent, int):
-            inherit = self.parent
-        else:
-            inherit = self.parent
+        inherit = self.parent
 
         ASTNode.set_asm_file(f"{self.name}.asm")
 
         ASTNode.buffer += f".class {self.name}:{inherit}\n"
 
         ASTNode.write()
+
+        ASTNode.args = {p[0]: p[1] for p in self.params.params}
 
         self.class_body.evaluate(len(self.get_params()), self.main)
 
@@ -1016,9 +1054,7 @@ class Class(ASTNode):
 
         ASTNode.program = temp_buffer + ASTNode.program
 
-        # log.info(f"ASTNode.buffer\n{ASTNode.buffer}")
-
-        # ASTNode.print_buffer()
+        log.info(f"{self}")
 
         ASTNode.write()
 
@@ -1073,15 +1109,9 @@ class TypecaseCase(ASTNode):
         ASTNode.buffer += f"\tis_instance {t}\n\tjump_if it_is{label}\n"
 
     def evaluate_block(self, label, tl):
-        # with open(Obj.ASM_FILE, "a") as f:
-        #     print(f"it_is{label}:", file=f)
-        # f.close()
         ASTNode.buffer += f"it_is{label}:\n"
         self.statements.evaluate()
-        # with open(Obj.ASM_FILE, "a") as f:
-        #     print(f"\tjump next{tl}", file=f)
-        # f.close()
-        ASTNode.buffer += f"\tjump next{tl}"
+        ASTNode.buffer += f"\tjump next{tl}\n"
 
 class Typecase(ASTNode):
     def __init__(self, test: Obj | ASTNode, cases: list[TypecaseCase] = []):
@@ -1112,33 +1142,31 @@ class Typecase(ASTNode):
         for c, l in zip(self.cases, labels):
             c.evaluate_block(l, tl)
         
-        # with open(Obj.ASM_FILE, "a") as f:
-        #     print(f"next{tl}:", file=f)
-        # f.close()
         ASTNode.buffer += f"next{tl}:\n"
 
 # TODO: generalize to all calls
 class Call(ASTNode):
     def __init__(self, var: Obj | ASTNode = None, method: str = None, args: Params = None):
         self.var = var
-        self.ret_type = "Nothing"
         self.type = "Nothing"
+        self.calling_type = "Nothing"
 
         self.args = args
 
         self.method = method
 
-        self.ret_type = None
+        self.type = "Nothing"
 
     def check(self):
         if isinstance(self.var, str):
             tpe = ASTNode.locate_var(self.var)
             if tpe is None:
                 ASTError(SYNTAX, f"Cannot call method {self.method} on uninitialized variable {self.var}")
-            self.type = tpe
+
             self.var = Variable(self.var, tpe)
-        else:
-            self.type = self.var.type
+
+        self.var.check()
+        self.calling_type = self.var.type
 
         self.check_method()
         self.check_args()
@@ -1152,37 +1180,36 @@ class Call(ASTNode):
             p = self.args
             if self.args is None or len(p) > 1 or len(p) == 0:
                 ASTError(SYNTAX, f"Method {self.method} takes 1 arguments, {len(self.args.get_params())} given.")
-            elif p[0].type != self.type:
-                ASTError(TYPE, f"Argument type {p[0].type} must match calling type {self.type} for method {self.method}.")
+            elif p[0].type != self.calling_type:
+                ASTError(TYPE, f"Argument type {p[0].type} must match calling type {self.calling_type} for method {self.method}.")
         
     def check_method(self):
-        if self.type not in ["Int", "String", "Obj", "Bool", "Nothing"]:
-            ms = Class.classes[self.type].get_methods()
+        if self.calling_type not in ["Int", "String", "Obj", "Bool", "Nothing"]:
+            ms = Class.classes[self.calling_type].get_methods()
             try:
-                self.ret_type = ms[self.method].type
+                self.type = ms[self.method].type
             except:
-                self.type = Class.classes[self.type].parent
+                self.calling_type = Class.classes[self.calling_type].parent
                 self.check_method()
                 return
         else:
-            if self.type == "Int":
+            if self.calling_type == "Int":
                 if self.method in ["less", "equals"]:
-                    self.ret_type = "Bool"
+                    self.type = "Bool"
                 elif self.method in ["plus", "minus", "times", "divide"]:
-                    self.ret_type = "Int"
+                    self.type = "Int"
             else:
                 if self.method in ["equals"]:
-                    self.ret_type = "Bool"
+                    self.type = "Bool"
                 elif self.method in ["string"]:
-                    self.ret_type = "String"
-        return 
+                    self.type = "String"
 
     def assign_var(self, expr: Obj | ASTNode):
         self.var = expr
-        self.type = expr.type
+        self.calling_type = expr.type
 
     def __str__(self):
-        return f"Call: {self.var}.{self.method}({self.args}), ret_type={self.ret_type}"
+        return f"Call: {self.var}.{self.method}({self.args}), ret_type={self.type}"
     
     def evaluate(self) -> None:
         """
@@ -1192,52 +1219,37 @@ class Call(ASTNode):
         log.info(f"{self}")
 
         calling = ""
-
-        # what does this do??
-        # for built-in funcs - make lower in assembly
-        # TODO: bring this back
-        # if isinstance(self.type, str):
-        #     ms = Class.classes[self.type].get_method_names()
-        #     try:
-        #         if self.method in ms:
-        #             self.method = self.method.lower()
-        #     except:
-        #         ASTError(SYNTAX, f"Method {self.method} does not exist for type {self.type}")
             
-        if self.type == "Int":
+        if self.calling_type == "Int":
             if self.method not in Int.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.calling_type}")
             calling = "Int"
-        elif self.type == "Obj":
+        elif self.calling_type == "Obj":
             if self.method not in Obj.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.calling_type}")
             calling = "Obj"
-        elif self.type == "Bool":
+        elif self.calling_type == "Bool":
             if self.method not in Bool.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.calling_type}")
             calling = "Bool"
-        elif self.type == "String":
+        elif self.calling_type == "String":
             if self.method not in String.methods:
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.calling_type}")
             calling = "String"
-        elif self.type == "Nothing":
-            raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-        elif isinstance(self.type, str):
-            if self.method not in Class.classes[self.type].get_method_names():
-                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.type}")
-            calling = self.type
-        
-        self.var.evaluate()
+        elif self.calling_type == "Nothing":
+            raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.calling_type}")
+        elif isinstance(self.calling_type, str):
+            if self.method not in Class.classes[self.calling_type].get_method_names():
+                raise Exception(f"Invalid method call on {self.var}: {self.method} does not exist for type {self.calling_type}")
+            calling = self.calling_type
         
         for arg in self.args:
             arg.evaluate()
-        # with open(Obj.ASM_FILE, "a") as f:
-        #     self.var.evaluate()
-        #     print(f"\tcall {calling}:{self.method}", file=f)
-        # f.close()
+
+        self.var.evaluate()
 
         ASTNode.buffer += f"\tcall {calling}:{self.method}\n"
 
         # log.debug(f"-----------\n{ASTNode.buffer}*\n------------")
 
-        return self.ret_type
+        return self.type

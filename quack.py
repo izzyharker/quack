@@ -563,7 +563,8 @@ class ParseTree():
         while self.pc < self.len and re.match(r"def", self.program[self.pc:]) is not None:
             log.debug("Found a new method!")
             body.add_method(self.Method())
-        self.eat(r"\}")
+        if re.match(r"\}", self.program[self.pc:]) is not None:
+            self.eat(r"\}")
         log.info(f"ClassBody: {body}")
         return body
     

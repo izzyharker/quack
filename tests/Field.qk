@@ -1,0 +1,6 @@
+class Test(x: Int) extends Int {
+    this.x = x;
+}
+
+x = Test(1);
+x.x.print();
