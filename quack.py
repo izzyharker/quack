@@ -156,6 +156,26 @@ class ParseTree():
         else:
             self.error(f"Ident {match.group()} cannot be a keyword!")
 
+    def class_ident(self):
+        keywords = r"class|if|while|and|typecase|def|elif|return|or|not|extends|else|none"
+        self.check_space()
+
+        # check that the ident is not a keyword - keyword followed by not an underscore or alphanumeric character.
+        match = re.match(keywords + r"[^\w^\_]", self.program[self.pc:])
+        if match is None:
+            # now check variable name - start with letter, then any letter, digit, or underscore
+            match = re.match(r"[a-zA-Z][\w\_]*", self.program[self.pc:])
+            if match is not None:
+                match = match.group()
+                self.eat(num_to_jump=len(match))
+                log.debug(f"Class Ident: {match}")
+
+                # An ident can be a variable, class, type, etc., so just return the string and decide what it is based on context. 
+                return match
+            return None
+        else:
+            self.error(f"Ident {match.group()} cannot be a keyword!")
+
     # Killing class_ident() because moving type checks to AST instead of ParseTree.
 
     def Calling_Args(self):
@@ -167,6 +187,8 @@ class ParseTree():
         # check if method takes no args first
         if self.program[self.pc] == ")":
             self.eat(r"\)")
+            log.debug("No arguments - returning")
+            log.debug(f"Current position: {self.program[self.pc:]}")
             return args
         
         while True:
@@ -185,7 +207,6 @@ class ParseTree():
 
         if isinstance(match, str) and self.program[self.pc] == "(":
             log.debug(f"Class instance: {match}")
-            self.eat(num_to_jump=len(match))
             args = self.Calling_Args()
             inst = UserClassInstance(match, args)
             return inst
@@ -301,7 +322,7 @@ class ParseTree():
         decl_type = None
         if self.program[self.pc] == ':':
             self.eat(r":")
-            decl_type = self.ident()
+            decl_type = self.class_ident()
         
         if self.program[self.pc] == "=":
             self.eat(r"=")
@@ -408,7 +429,7 @@ class ParseTree():
             while re.match(r"\}", self.program[self.pc:]) is None:
                 check = self.ident()
                 self.eat(r":")
-                classtype = self.ident()
+                classtype = self.class_ident()
                 self.eat(r"\{")
                 block = []
                 self.Statement_Block(r"\}", block)
@@ -491,7 +512,7 @@ class ParseTree():
         while re.match(r"\)", self.program[self.pc]) is None:
             name = self.ident()
             self.eat(r":")
-            tpe = self.ident()
+            tpe = self.class_ident()
             args.append((name, tpe))
             try:
                 self.eat(r",")
@@ -513,7 +534,7 @@ class ParseTree():
 
             # get return type
             self.eat(r":", 1)
-            ret = self.ident()
+            ret = self.class_ident()
             self.eat(r"\{", 1)
 
             # parse statements
@@ -562,7 +583,7 @@ class ParseTree():
         match = re.match(r"extends", self.program[self.pc:])
         if match is not None:
             self.eat(r"extends", len("extends"))
-            parent = self.ident()
+            parent = self.class_ident()
             log.debug(f"new class {classname} extending {parent}")
         else:
             parent = "Obj"
@@ -574,6 +595,8 @@ class ParseTree():
         log.info(f"Parsing {new_class}\n--------------")
 
         new_class.set_body(self.ClassBody())
+
+        ParseTree.classes.append(new_class.name)
 
         log.debug(f"{new_class}")
         log.info(f"Successfully parsed {new_class}\n-------------------")
@@ -620,6 +643,9 @@ def main():
     tree = ParseTree(program)
     tree.Parse()
 
+    log.info("Walking ASTNode Tree:\n")
+    log.info(f"Classes: {ParseTree.classes}\n")
+
     for c in ParseTree.classes:
         Class.classes[c].evaluate()
         if c == out_file:
@@ -644,11 +670,10 @@ def main():
     # print("\n\tenter", file=f)
     # f.close()
 
-    log.info("Walking ASTNode Tree:")
-
+    log.info("Parsing statements...")
     b = Block(ParseTree.statements)
 
-    c = Class(out_file, [], ClassBody(b), "Obj", main=True)
+    c = Class(out_file, [], ClassBody(b, []), "Obj", main=True)
     c.evaluate()
 
     # log.debug(f"End of block\n{ASTNode.buffer}*")
