@@ -139,12 +139,8 @@ class Variable(Obj):
         if tpe is None:
             ASTError(SYNTAX, f"Uninitialized variable {self.name}")
 
-    # TODO: write self.check to check that variable is active
     def evaluate(self) -> None:
         self.check()
-        # with open(Obj.ASM_FILE, "a") as f:
-        #     print(f"\tload {self.name}", file=f)
-        # f.close()
         ASTNode.buffer += f"\tload {self.name}\n"
         return self.type
 
@@ -171,7 +167,6 @@ class ASTNode():
     """
     scope: dict[str: str] = {}
 
-    # TODO: add args to this when entering method
     args: list[str] = {}
     block_level = 0
 
@@ -544,8 +539,6 @@ class Not(ASTNode):
         # reverse control flow
         self.expr.evaluate()
 
-# TODO: variable tracking on assign
-# keep track of live variable set & types
 class Assign(ASTNode):
     def __init__(self, var: Variable | str, val: Obj | ASTNode, declared_type: int = None):
         self.val = val
@@ -571,10 +564,12 @@ class Assign(ASTNode):
         # If we assigned a variable to another variable, 
         # Locate it in the current live set.
         val = self.val
-        # TODO: if this is a field, check the field name against class fields
+        
         if isinstance(self.val, str):
             val = ASTNode.locate_var(self.val)
             self.val = Variable(self.val, val)
+        elif isinstance(self.val, Field):
+            val = Class.classes[self.val.belongs].get_field(self.val.field)
 
         self.val.check()
         val = self.val.type
@@ -981,8 +976,6 @@ class ClassBody(ASTNode):
         for method in self.methods:
             method.evaluate()
 
-# TODO: make sure add_field happens
-# might need secondary buffer for block eval
 class Class(ASTNode):
     # list of user-defined classes
     # name of class : class
@@ -1169,7 +1162,6 @@ class Typecase(ASTNode):
         
         ASTNode.buffer += f"next{tl}:\n"
 
-# TODO: generalize to all calls
 class Call(ASTNode):
     def __init__(self, var: Obj | ASTNode = None, method: str = None, args: Params = None):
         self.var = var
