@@ -29,7 +29,7 @@ make
 # Things that work
 The features described here all work, along with all other features of Quack, except those described in "Things that don't work" (below). It is possible that there are some edge cases I didn't manage to check, but I have a pretty comprehensive suite of good/bad tests that run (or don't run, depending).  
 
-If you would like the most involved example of all the things that work, `tests/Pt.qk` is the sample `Pt` program, with some added statements to test the class functionality. It runs correctly. 
+If you would like the most involved example of all the things that work, `tests/Pt.qk` is the sample `Pt` program, with some added statements to test the class functionality, including +, print, and an implicit translate method. It runs correctly. 
  
  ## Type-checking
  Type-checking is flow-sensitive for the most part. Normal variables can be re-assigned to different types, with 2 exceptions.
