@@ -3,9 +3,7 @@
 # Running
 Many bash scripts are provided. `quack` will compile and execute, and `quackc` will compile but not execute a given program. Additionally, `compile` will compile a .qk file to .asm, `assemble` will assemble it into object code, and `run` will run an assembled program. 
 
-Scripts will produce a .asm file with the same name as the input .qk file containing a single class of the same name, so long as additional classes are not defined. (For example, `./quack qk_test/If.qk` will compile If.asm and run If.json in the tiny_vm). 
-
-If the file contains multiple class definitions (such as the sample `ReturnCheck`), a separate .asm file will be created with the name of each class, as well as a class containing [TODO]
+Scripts will produce a .asm file with the same name as the input .qk file containing a single class of the same name, so long as additional classes are not defined. (For example, `./quack qk_test/If.qk` will compile If.asm and run If.json in the tiny_vm). If additional classes are defined, each will get its own .asm file with the name of the file matching the name of the class. In the case that a user-defined class shares a name with the original file (`Ex.qk` containing `class Ex()`), the statements at the end will be moved to `Main.asm`. Please don't name a class `Main`, it will probably break something and I would be sad. 
 
 For example, to run `ReturnCheck.qk`, the sequence would be
 ```
@@ -16,7 +14,7 @@ For example, to run `ReturnCheck.qk`, the sequence would be
 ```
 `Class.qk` is the other 
 
-A number of tests are given in the directory `tests/`. Bad test files follow the naming convention `bad_xxxx.qk`, and demonstrate a program error that the quack compiler will catch. The specific compiler error might seem a bit weird but the point it that it won't work. This can be tested with either `compile` or `quack[c]`, since the error is in the compilation step. The test files are all named for the feature that they demonstrate.
+A number of tests are given in the directory `tests/`. Bad test files follow the naming convention `bad_xxxx.qk`, and demonstrate a program error that the quack compiler will catch. This can be tested with either `compile` or `quack[c]`, since the error is in the compilation step. In general, the name of the test file describes the feature that it demonstrates success or error catching on. 
 
 It is possible that you will need to re-compile the tiny vm. This can be done by running the following commands, in-order.
 ```
@@ -26,22 +24,50 @@ cd cmake-build-debug
 make
 ```
 
+`quack.py` contains all the parsing and tree generation functionality, as well as the main execution function. `AST.py` contains the `ASTNode` class implementation and all the tree evaluation/type checking functionality. Each ASTNode (for the most part) has a `check` method, which does the necessary type checking for each node, and an `evaluate` method, which generates the asm code. 
+
 # Things that work
-## Parsing
-All major features of Quack except one work in the test cases I have provided (see later for elaboration).
+The features described here all work, along with all other features of Quack, except those described in "Things that don't work" (below). It is possible that there are some edge cases I didn't manage to check, but I have a pretty comprehensive suite of good/bad tests that run (or don't run, depending).  
+ 
+ ## Type-checking
+ Type-checking is flow-sensitive for the most part. Normal variables can be re-assigned to different types, with 2 exceptions.
+ - Fields cannot be reassigned once they are given a type, either explicitly or implicitly
+ - If a variable is given an explicit type (such as `x: Int`), then the variable cannot be assigned a different type within that particular assignment. For example, 
+```
+x: Int = "hi";
+```
+is illegal, but
+```
+x: Int = 7;
+x = "hi";
+```
+is allowed. 
 
-## Type-checking
-Declared variables, fields, assignments, method arguments, calls and return values from calls, method calls on objects.
+## Classes
+Class definition follows as normal. Assembling classes is a bit tricky because they are split into separate files. 
+- If the file name matches a declared class and the file contains statements at the end, then the statements will be put into a `Main.asm` file and the declared classes will be under matching filenames (class Class -> Class.asm). Otherwise, the statements will go under filename.asm. 
+- Suggested compilation steps for files with user-defined classes:
+```
+./compile [file].qk
+foreach user-defined class in file U:
+    ./assemble [U].asm
+./assemble [Main or file].asm
+./run [Main or file]
+```
 
-# Things that don't work (or sort of don't work)
+# Things that don't work
+## Flow-sensitive variable scope
+This slipped my mind until right at the very end, and I did not have time to implement it. Currently, every variable declared in any if/elif/else block will count as initialized, whether it actually exists _in the code_ or not. That is,
+```
+if (x) {
+    y = 1;
+}
+else {
+    z = 1;
+}
+y.print();
+```
+will run, even though it should complain.
 
-`x.y.z` - only one field access parses correctly. I know why this is a problem but it would be likely very difficult/annoying to fix.
-
-Uninitialized variables - these will throw an error, but the error isn't that it's uninitilized. Rather, new variables all get type NOTHING, and the error is thrown on a type check. 
-
-Short strings ("...") - Certain \c characters are meant to be illegal - they are allowed. I had many issues with the regex for this and eventually decided that making other things work (classes, type checking, etc.) was higher priority. 
-
-# Notes
-I admitted defeat for certain aspects of this compiler, slightly because of time purposes (I am in Wisconsin for Nationals and had less time than I anticipated to work) but mainly because I made some structural choices early on that I didn't realize would be problems until I attempted some of the harder aspects such as flow-sensitive analysis, and fixing these issues would require basically rewriting everything. This made it difficult to properly implement certain features like flow-sensitive analysis and static typing for variables. 
-
-I also kept running into small errors due to these structural decisions, and I wasn't able to test the system as extensively as I would have liked. 
+## not [bool]
+I wrote not to work with the comparison and and/or operator and forgot about it. Consequently, `not true` and things like that don't work. Whoops.
